@@ -490,14 +490,32 @@ async function generate() {
     var tyeRaw = document.getElementById('eTYE').value || '';
     var tyeStr = tyeRaw ? new Date(tyeRaw + 'T00:00:00').getFullYear().toString() : '';
     var method = document.getElementById('eMethod').value;
+    // Build formatted date for 1065 placeholders (MM/DD/YYYY)
+    var tyeFormatted = '';
+    var tyeStart = '';
+    if (tyeRaw) {
+      var d = new Date(tyeRaw + 'T00:00:00');
+      tyeFormatted = (d.getMonth()+1) + '/' + d.getDate() + '/' + d.getFullYear();
+      // Tax year start = Jan 1 of same year (calendar) or year prior (fiscal)
+      var startYear = document.getElementById('eFY').value === 'Fiscal' ? d.getFullYear() - 1 : d.getFullYear();
+      tyeStart = '01/01/' + startYear + ' - ' + tyeFormatted;
+    }
+    var ownerCount = ST.owners === '3+' ? '3' : (ST.owners || '1');
+    var ownerSplit = ownerCount === '1' ? '100' : (ownerCount === '2' ? '50/50' : 'See K-1s');
 
     var replacements = [
       ['[ENTITY NAME]', name],
       ['[Entity Name]', name],
       ['[YEAR]', tyeStr],
       ['XX-XXXXXXX', ein],
+      ['[XX-XXXXXXX]', ein],
       ['[EIN]', ein],
-      ['[METHOD]', method]
+      ['[METHOD]', method],
+      ['[MM/DD/YYYY]', tyeFormatted],
+      ['[Accrual/Cash]', method],
+      ['[#] Partners', ownerCount + ' Partners'],
+      ['[Split]', ownerSplit],
+      ['[Start] - [End]', tyeStart]
     ];
 
     for (var s = 0; s < wb.SheetNames.length; s++) {
