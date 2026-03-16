@@ -49,7 +49,7 @@ h2{font-family:var(--disp);font-weight:600;font-size:28px;margin-bottom:8px}
 .card .form-desc{font-size:12px;color:var(--t2);line-height:1.4}
 .card .check{position:absolute;top:12px;right:12px;width:20px;height:20px;border-radius:50%;border:2px solid var(--t3);display:flex;align-items:center;justify-content:center;transition:all .2s}
 .card.selected .check{border-color:var(--orange);background:var(--orange)}
-.card.selected .check::after{content:'✓';color:var(--bg);font-size:12px;font-weight:700}
+.card.selected .check::after{content:'\2713';color:var(--bg);font-size:12px;font-weight:700}
 .q-group{margin-bottom:24px}
 .q-label{font-family:var(--disp);font-size:15px;font-weight:600;margin-bottom:4px}
 .q-hint{font-size:12px;color:var(--t2);margin-bottom:10px}
@@ -105,7 +105,7 @@ h2{font-family:var(--disp);font-weight:600;font-size:28px;margin-bottom:8px}
 <body>
 <div class="header">
 <div class="brand">TAX ALCHEMY<sub>WTB TEMPLATE GENERATOR</sub></div>
-<span class="ver">v1.0</span>
+<span class="ver">v2.0</span>
 </div>
 <div class="main">
 <div class="steps" id="steps"></div>
@@ -147,7 +147,7 @@ h2{font-family:var(--disp);font-weight:600;font-size:28px;margin-bottom:8px}
 <div class="q-hint">Determines Schedule L/M-3 requirements</div>
 <div class="opts" data-q="assets">
 <div class="opt" onclick="pickOpt(this,'assets','low')">Under $250K</div>
-<div class="opt" onclick="pickOpt(this,'assets','mid')">$250K – $10M</div>
+<div class="opt" onclick="pickOpt(this,'assets','mid')">$250K - $10M</div>
 <div class="opt" onclick="pickOpt(this,'assets','high')">Over $10M</div>
 </div>
 </div>
@@ -156,7 +156,7 @@ h2{font-family:var(--disp);font-weight:600;font-size:28px;margin-bottom:8px}
 <div class="q-hint">Affects filing exemptions and schedule requirements</div>
 <div class="opts" data-q="revenue">
 <div class="opt" onclick="pickOpt(this,'revenue','low')">Under $250K</div>
-<div class="opt" onclick="pickOpt(this,'revenue','mid')">$250K – $25M</div>
+<div class="opt" onclick="pickOpt(this,'revenue','mid')">$250K - $25M</div>
 <div class="opt" onclick="pickOpt(this,'revenue','high')">Over $25M</div>
 </div>
 </div>
@@ -243,1203 +243,1290 @@ h2{font-family:var(--disp);font-weight:600;font-size:28px;margin-bottom:8px}
 </div>
 
 <script>
-// ═══════════════════════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════════════════════
-let step=1, ST={type:'',assets:'',revenue:'',owners:'',adj:'',obi:'',tier:''};
-const STEPS=['Entity Type','Complexity','Details','Generate'];
+// =====================================================================
+//  STATE & NAVIGATION
+// =====================================================================
+let step = 1;
+let ST = { type:'', assets:'', revenue:'', owners:'', adj:'', obi:'', tier:'' };
+const STEPS = ['Entity Type','Complexity','Details','Generate'];
 
-function renderSteps(){
-const s=document.getElementById('steps');
-s.innerHTML=STEPS.map((_,i)=>`<div class="step-dot ${i+1<step?'done':''} ${i+1===step?'active':''}"></div>`).join('');
-document.getElementById('stepLabel').textContent=`STEP ${step} OF ${STEPS.length} — ${STEPS[step-1].toUpperCase()}`;
-document.querySelectorAll('.panel').forEach((p,i)=>{p.classList.toggle('active',i+1===step)});
+function renderSteps() {
+  document.getElementById('steps').innerHTML = STEPS.map((_,i) =>
+    '<div class="step-dot '+(i+1<step?'done':'')+' '+(i+1===step?'active':'')+'"></div>'
+  ).join('');
+  document.getElementById('stepLabel').textContent = 'STEP '+step+' OF '+STEPS.length+' \u2014 '+STEPS[step-1].toUpperCase();
+  document.querySelectorAll('.panel').forEach(function(p,i){ p.classList.toggle('active', i+1===step); });
 }
-function next(){if(step<4){step++;renderSteps();if(step===3)buildOwnerFields();if(step===4)buildReview()}}
-function prev(){if(step>1){step--;renderSteps()}}
+function next() { if(step<4){step++;renderSteps();if(step===3)buildOwnerFields();if(step===4)buildReview();} }
+function prev() { if(step>1){step--;renderSteps();} }
 
-// ═══════════════════════════════════════════════════════════════
-// STEP 1: Entity Type
-// ═══════════════════════════════════════════════════════════════
-function pickType(t){
-ST.type=t;
-document.querySelectorAll('#p1 .card').forEach(c=>{
-c.classList.toggle('selected',c.querySelector('.form-num').textContent.replace('-','')===t);
-});
-document.getElementById('btn1').disabled=false;
-const lbl=t==='1065'?'Number of partners?':t==='1120S'?'Number of shareholders?':'Number of owners?';
-document.getElementById('ownerLabel').textContent=lbl;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// STEP 2: Complexity
-// ═══════════════════════════════════════════════════════════════
-function pickOpt(el,q,v){
-ST[q]=v;
-el.parentElement.querySelectorAll('.opt').forEach(o=>o.classList.remove('sel'));
-el.classList.add('sel');
-calcTier();
-}
-function calcTier(){
-const {assets,revenue,owners,adj}=ST;
-if(!assets||!revenue||!owners||!adj)return;
-let t='simple';
-if(assets==='high'||revenue==='high')t='full';
-else if(assets==='mid'||revenue==='mid'||adj==='complex'||owners==='3+')t='moderate';
-else if(adj==='simple')t='moderate';
-ST.tier=t;
-const cls={simple:'tier-simple',moderate:'tier-moderate',full:'tier-full'};
-const tabs=getTabList();
-document.getElementById('tierResult').innerHTML=
-`<span class="tier-badge ${cls[t]}">${t.toUpperCase()} TEMPLATE</span>`+
-`<span style="font-family:var(--mono);font-size:11px;color:var(--t2);margin-left:8px">${tabs.length} tabs</span>`;
-document.getElementById('btn2').disabled=false;
+// =====================================================================
+//  STEP 1: ENTITY TYPE
+// =====================================================================
+function pickType(t) {
+  ST.type = t;
+  document.querySelectorAll('#p1 .card').forEach(function(c){
+    c.classList.toggle('selected', c.querySelector('.form-num').textContent.replace('-','') === t);
+  });
+  document.getElementById('btn1').disabled = false;
+  var lbl = t==='1065' ? 'Number of partners?' : t==='1120S' ? 'Number of shareholders?' : 'Number of owners?';
+  document.getElementById('ownerLabel').textContent = lbl;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// TAB DEFINITIONS PER TYPE + TIER
-// ═══════════════════════════════════════════════════════════════
-const TABS={
-'1120':{
-'Preparer Guide':      {min:'simple'},
-'PBC - P&L':           {min:'simple'},
-'PBC - Balance Sheet': {min:'simple'},
-'Strategy Inputs':     {min:'moderate'},
-'Adjusting Entries':   {min:'moderate'},
-'Working Trial Balance':{min:'simple'},
-'Schedule M-1':        {min:'simple'},
-'Schedule L':          {min:'simple'},
-'Schedule M-2':        {min:'simple'},
-'Schedule J':          {min:'simple'},
-'Schedule M-3':        {min:'full'},
-},
-'1120S':{
-'Instructions':        {min:'simple'},
-'PBC - P&L':           {min:'simple'},
-'PBC - Balance Sheet': {min:'simple'},
-'Strategy Inputs':     {min:'moderate'},
-'Adjusting Entries':   {min:'moderate'},
-'Working Trial Balance':{min:'simple'},
-'Schedule K':          {min:'simple'},
-'Schedule M-1':        {min:'moderate'},
-'Schedule L':          {min:'moderate'},
-'Schedule M-2':        {min:'moderate'},
-'Form 7203':           {min:'simple'},
-'Schedule M-3':        {min:'full'},
-},
-'1065':{
-'Client Books':        {min:'simple'},
-'Working Trial Balance':{min:'simple'},
-'Sch K Workpaper':     {min:'simple'},
-'M-1 Workpaper':       {min:'moderate'},
-'M-2 Workpaper':       {min:'moderate'},
-'Adjustments Workpaper':{min:'moderate'},
-'M-3 Workpaper':       {min:'full'},
-'Tax Strategies':      {min:'full'},
+// =====================================================================
+//  STEP 2: COMPLEXITY & TIER
+// =====================================================================
+function pickOpt(el, q, v) {
+  ST[q] = v;
+  el.parentElement.querySelectorAll('.opt').forEach(function(o){ o.classList.remove('sel'); });
+  el.classList.add('sel');
+  calcTier();
 }
+function calcTier() {
+  if (!ST.assets || !ST.revenue || !ST.owners || !ST.adj) return;
+  var t = 'simple';
+  if (ST.assets==='high' || ST.revenue==='high') t = 'full';
+  else if (ST.assets==='mid' || ST.revenue==='mid' || ST.adj==='complex' || ST.owners==='3+') t = 'moderate';
+  else if (ST.adj==='simple') t = 'moderate';
+  ST.tier = t;
+  var cls = {simple:'tier-simple', moderate:'tier-moderate', full:'tier-full'};
+  var tabs = getTabList();
+  document.getElementById('tierResult').innerHTML =
+    '<span class="tier-badge '+cls[t]+'">'+t.toUpperCase()+' TEMPLATE</span>'+
+    '<span style="font-family:var(--mono);font-size:11px;color:var(--t2);margin-left:8px">'+tabs.length+' tabs</span>';
+  document.getElementById('btn2').disabled = false;
+}
+
+// =====================================================================
+//  TAB DEFINITIONS PER ENTITY TYPE + TIER
+//  "min" = minimum tier needed. simple < moderate < full
+// =====================================================================
+var TABS = {
+  '1120': {
+    'Preparer Guide':       { min:'simple' },
+    'PBC - P&L':            { min:'simple' },
+    'PBC - Balance Sheet':  { min:'simple' },
+    'Strategy Inputs':      { min:'moderate' },
+    'Adjusting Entries':    { min:'moderate' },
+    'Working Trial Balance':{ min:'simple' },
+    'Schedule M-1':         { min:'simple' },
+    'Schedule L':           { min:'simple' },
+    'Schedule M-2':         { min:'simple' },
+    'Schedule J':           { min:'simple' },
+    'Schedule M-3':         { min:'full' }
+  },
+  '1120S': {
+    'Preparer Guide':       { min:'simple' },
+    'PBC - P&L':            { min:'simple' },
+    'PBC - Balance Sheet':  { min:'simple' },
+    'Strategy Inputs':      { min:'moderate' },
+    'Adjusting Entries':    { min:'moderate' },
+    'Working Trial Balance':{ min:'simple' },
+    'Schedule K':           { min:'simple' },
+    'Schedule M-1':         { min:'moderate' },
+    'Schedule L':           { min:'moderate' },
+    'Schedule M-2':         { min:'moderate' },
+    'Form 7203':            { min:'simple' },
+    'Schedule M-3':         { min:'full' }
+  },
+  '1065': {
+    'Preparer Guide':       { min:'simple' },
+    'PBC - P&L':            { min:'simple' },
+    'PBC - Balance Sheet':  { min:'simple' },
+    'Strategy Inputs':      { min:'moderate' },
+    'Adjusting Entries':    { min:'moderate' },
+    'Working Trial Balance':{ min:'simple' },
+    'Sch K Workpaper':      { min:'simple' },
+    'M-1 Workpaper':        { min:'moderate' },
+    'M-2 Workpaper':        { min:'moderate' },
+    'M-3 Workpaper':        { min:'full' },
+    'Tax Strategies':       { min:'full' }
+  }
 };
-const TIER_RANK={simple:0,moderate:1,full:2};
-function getTabList(){
-if(!ST.type||!ST.tier)return[];
-const defs=TABS[ST.type];
-return Object.entries(defs).filter(([_,v])=>TIER_RANK[ST.tier]>=TIER_RANK[v.min]).map(([k])=>k);
+var TIER_RANK = { simple:0, moderate:1, full:2 };
+function getTabList() {
+  if (!ST.type || !ST.tier) return [];
+  var defs = TABS[ST.type];
+  return Object.keys(defs).filter(function(k){ return TIER_RANK[ST.tier] >= TIER_RANK[defs[k].min]; });
 }
 
-// ═══════════════════════════════════════════════════════════════
-// STEP 3: Owner Fields
-// ═══════════════════════════════════════════════════════════════
-function buildOwnerFields(){
-const n=ST.owners==='3+'?3:parseInt(ST.owners)||1;
-const label=ST.type==='1065'?'Partner':'Shareholder';
-let h=`<div class="q-label" style="margin-bottom:10px">${label} Information</div>`;
-for(let i=0;i<n;i++){
-h+=`<div class="owner-row">
-<div class="field"><label>${label} ${i+1} Name</label><input id="own${i}" placeholder="Full name"></div>
-<div class="field"><label>Ownership %</label><input id="pct${i}" placeholder="${Math.floor(100/n)}%" type="number" min="0" max="100"></div>
-</div>`;
-}
-document.getElementById('ownerFields').innerHTML=h;
+// =====================================================================
+//  STEP 3: OWNER FIELDS
+// =====================================================================
+function buildOwnerFields() {
+  var n = ST.owners==='3+' ? 3 : parseInt(ST.owners) || 1;
+  var label = ST.type==='1065' ? 'Partner' : 'Shareholder';
+  var h = '<div class="q-label" style="margin-bottom:10px">'+label+' Information</div>';
+  for (var i=0; i<n; i++) {
+    h += '<div class="owner-row">' +
+      '<div class="field"><label>'+label+' '+(i+1)+' Name</label><input id="own'+i+'" placeholder="Full name"></div>' +
+      '<div class="field"><label>Ownership %</label><input id="pct'+i+'" placeholder="'+Math.floor(100/n)+'%" type="number" min="0" max="100"></div>' +
+      '</div>';
+  }
+  document.getElementById('ownerFields').innerHTML = h;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// STEP 4: Review
-// ═══════════════════════════════════════════════════════════════
-function buildReview(){
-const name=document.getElementById('eName').value||'[Entity Name]';
-const ein=document.getElementById('eEIN').value||'XX-XXXXXXX';
-const tye=document.getElementById('eTYE').value||'12/31/2025';
-const method=document.getElementById('eMethod').value;
-const typeNames={'1120':'Form 1120 (C-Corp)','1120S':'Form 1120-S (S-Corp)','1065':'Form 1065 (Partnership)'};
-const cls={simple:'tier-simple',moderate:'tier-moderate',full:'tier-full'};
-let h=`<h3>Entity Summary</h3>`;
-const rows=[
-['Entity',name],['EIN',ein],['Return Type',typeNames[ST.type]],
-['Tax Year End',tye],['Method',method],
-['Template Tier',`<span class="tier-badge ${cls[ST.tier]}">${ST.tier.toUpperCase()}</span>`]
+// =====================================================================
+//  STEP 4: REVIEW
+// =====================================================================
+function buildReview() {
+  var name = document.getElementById('eName').value || '[Entity Name]';
+  var ein  = document.getElementById('eEIN').value || 'XX-XXXXXXX';
+  var tye  = document.getElementById('eTYE').value || '12/31/2025';
+  var method = document.getElementById('eMethod').value;
+  var typeNames = { '1120':'Form 1120 (C-Corp)', '1120S':'Form 1120-S (S-Corp)', '1065':'Form 1065 (Partnership)' };
+  var cls = { simple:'tier-simple', moderate:'tier-moderate', full:'tier-full' };
+  var h = '<h3>Entity Summary</h3>';
+  var rows = [
+    ['Entity',name], ['EIN',ein], ['Return Type',typeNames[ST.type]],
+    ['Tax Year End',tye], ['Method',method],
+    ['Template Tier','<span class="tier-badge '+cls[ST.tier]+'">'+ST.tier.toUpperCase()+'</span>']
+  ];
+  rows.forEach(function(r){ h += '<div class="review-row"><span class="rl">'+r[0]+'</span><span class="rv">'+r[1]+'</span></div>'; });
+  document.getElementById('reviewSummary').innerHTML = h;
+  var tabs = getTabList();
+  document.getElementById('tabList').innerHTML = tabs.map(function(t){ return '<span class="tab-tag included">'+t+'</span>'; }).join('');
+}
+
+
+// =====================================================================
+// =====================================================================
+//
+//  EXCEL ENGINE  (xlsx-js-style)
+//
+//  IMPORTANT RULES FOR xlsx-js-style:
+//  1. Formula strings go in cell.f WITHOUT a leading "="
+//     e.g.  cell.f = "SUM(B5:B10)"     NOT  "=SUM(B5:B10)"
+//  2. Style object goes in cell.s  (font, fill, numFmt, border, alignment)
+//  3. numFmt goes INSIDE cell.s, e.g. cell.s = { numFmt: '#,##0' }
+//  4. Empty input cells: use v:'', t:'s'  (never v:null)
+//  5. Always update ws['!ref'] to cover all written cells
+//
+// =====================================================================
+// =====================================================================
+
+// --- Styles ---
+var S_INPUT = { fill:{patternType:'solid',fgColor:{rgb:'FFFFFF00'}}, font:{name:'Consolas',sz:10,color:{rgb:'000000FF'}}, numFmt:'#,##0;(#,##0);"-"' };
+var S_FORMULA = { font:{name:'Consolas',sz:10,color:{rgb:'00000000'}}, numFmt:'#,##0;(#,##0);"-"' };
+var S_FORMULA_BOLD = { font:{name:'Consolas',sz:10,bold:true,color:{rgb:'00000000'}}, numFmt:'#,##0;(#,##0);"-"' };
+var S_LABEL = { font:{name:'Arial',sz:10} };
+var S_HDR = { font:{name:'Arial',sz:14,bold:true,color:{rgb:'00F07840'}} };
+var S_SEC = { font:{name:'Arial',sz:11,bold:true,color:{rgb:'00FFFFFF'}}, fill:{patternType:'solid',fgColor:{rgb:'00F07840'}} };
+var S_MONO = { font:{name:'Consolas',sz:10} };
+var S_MUTED = { font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}} };
+var S_MUTED_SM = { font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}} };
+var S_GRAY_IT = { font:{name:'Arial',sz:10,color:{rgb:'00999999'},italic:true} };
+var S_RED_BOLD = { font:{name:'Arial',sz:10,bold:true,color:{rgb:'00E05555'}} };
+var S_RED_MONO = { font:{name:'Consolas',sz:10,bold:true,color:{rgb:'00E05555'}}, numFmt:'#,##0;(#,##0);"-"' };
+var S_COL_HDR = { font:{name:'Arial',sz:9,bold:true}, alignment:{wrapText:true,horizontal:'center'} };
+
+// --- Cell writers ---
+// sc: set cell value (string or number). For empty input cells, pass '' with S_INPUT.
+function sc(ws, r, c, val, style) {
+  var addr = XLSX.utils.encode_cell({r:r, c:c});
+  if (val === null || val === undefined) val = '';
+  var t = typeof val === 'number' ? 'n' : 's';
+  ws[addr] = { v:val, t:t };
+  if (style) ws[addr].s = style;
+  trackRef(ws, r, c);
+}
+
+// sf: set cell formula. Formula must NOT start with "=".
+function sf(ws, r, c, formula, style) {
+  var addr = XLSX.utils.encode_cell({r:r, c:c});
+  // Strip leading = if present (safety net)
+  if (formula && formula.charAt(0) === '=') formula = formula.substring(1);
+  ws[addr] = { f:formula, t:'n' };
+  if (style) ws[addr].s = style;
+  trackRef(ws, r, c);
+}
+
+// Track the max row/col so we can set !ref accurately at the end
+function trackRef(ws, r, c) {
+  if (!ws._maxR || r > ws._maxR) ws._maxR = r;
+  if (!ws._maxC || c > ws._maxC) ws._maxC = c;
+}
+function finalizeWS(ws) {
+  ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:ws._maxR||0, c:ws._maxC||0}});
+  delete ws._maxR;
+  delete ws._maxC;
+}
+
+// --- Section helpers ---
+function writeHdr(ws, r, text, cols) {
+  sc(ws, r, 0, text, S_HDR);
+  if (cols > 1) {
+    if (!ws['!merges']) ws['!merges'] = [];
+    ws['!merges'].push({s:{r:r,c:0}, e:{r:r,c:cols-1}});
+  }
+}
+function writeSec(ws, r, text, cols) {
+  for (var c=0; c<cols; c++) sc(ws, r, c, '', S_SEC);
+  sc(ws, r, 0, text, S_SEC);
+}
+
+
+// =====================================================================
+//
+//  TEMPLATE DATA DEFINITIONS
+//
+//  TO EDIT TEMPLATES: Find the array below for the tab you want.
+//  Each row is:  [label, options]
+//  Options vary by tab type — see comments above each array.
+//
+// =====================================================================
+
+// -------------------------------------------------------------------
+//  PBC - P&L LINE ITEMS
+//  Each entry: [row, label, isSection, isFormula, formula]
+//  isSection=true -> orange section header
+//  isFormula=true -> black formula cell (formula string, no leading =)
+//  otherwise -> yellow input cell
+// -------------------------------------------------------------------
+var PBC_PNL_LINES = [
+  // [row, label, isSection, isFormula, formula]
+  [4, 'REVENUE', true],
+  [5, 'Gross Receipts / Sales'],
+  [6, 'Returns & Allowances'],
+  [7, 'Net Sales', false, true, 'B6+B7'],
+  [8, 'Equipment Rental Income'],
+  [10, 'COST OF GOODS SOLD', true],
+  [11, 'Cost of Goods Sold'],
+  [12, 'Gross Profit', false, true, 'B8-B12'],
+  [14, 'OTHER INCOME', true],
+  [15, 'Interest Income'],
+  [16, 'Dividend Income'],
+  [17, 'Capital Gain \u2014 Stock Sales'],
+  [18, 'Gain on Sale of Equipment'],
+  [19, 'Tax-Exempt Interest'],
+  [20, 'Unrealized Gain on Investments'],
+  [21, 'Royalties'],
+  [22, 'Other Income'],
+  [23, 'Total Other Income', false, true, 'SUM(B16:B23)'],
+  [25, 'OFFICER COMPENSATION', true],
+  [26, 'Officer Compensation'],
+  [28, 'SALARIES & WAGES', true],
+  [29, 'Salaries & Wages (non-officer)'],
+  [31, 'DEDUCTIONS', true],
+  [32, 'Repairs & Maintenance'],
+  [33, 'Bad Debts'],
+  [34, 'Rents'],
+  [35, 'Taxes & Licenses'],
+  [36, 'Interest Expense'],
+  [37, 'Depreciation \u2014 Vehicles (Book)'],
+  [38, 'Depreciation \u2014 FF&E (Book)'],
+  [39, 'Depreciation \u2014 Computers (Book)'],
+  [40, 'Depreciation \u2014 Leasehold (Book)'],
+  [41, 'Advertising'],
+  [42, 'Pension/Profit-Sharing'],
+  [43, 'Employee Benefit Programs'],
+  [44, 'Meals (Business)'],
+  [45, 'Entertainment'],
+  [46, 'Charitable Contributions'],
+  [47, 'Political Contributions'],
+  [48, 'Penalties & Fines'],
+  [49, 'Life Insurance (Corp Beneficiary)'],
+  [50, 'Club Dues'],
+  [51, 'Rental Activity Expenses'],
+  [52, 'Other Deductions'],
+  [53, 'Total Deductions', false, true, 'SUM(B33:B53)'],
+  [55, 'NET INCOME (BOOK)', false, true, 'B13+B9+B24-B27-B30-B54']
 ];
-rows.forEach(([l,v])=>h+=`<div class="review-row"><span class="rl">${l}</span><span class="rv">${v}</span></div>`);
-document.getElementById('reviewSummary').innerHTML=h;
-const tabs=getTabList();
-document.getElementById('tabList').innerHTML=tabs.map(t=>`<span class="tab-tag included">${t}</span>`).join('');
-}
 
-// ═══════════════════════════════════════════════════════════════
-// EXCEL GENERATION
-// ═══════════════════════════════════════════════════════════════
-const YEL={patternType:'solid',fgColor:{rgb:'FFFFFF00'}};
-const BLU={color:{rgb:'000000FF'}};
-const BLK={color:{rgb:'00000000'}};
-const WHT={color:{rgb:'00F0EAE0'}};
-const GRY={color:{rgb:'00999999'},italic:true};
-const HDR_FILL={patternType:'solid',fgColor:{rgb:'001E1C1A'}};
-const SEC_FILL={patternType:'solid',fgColor:{rgb:'00F07840'}};
-const BORDER={bottom:{style:'thin',color:{rgb:'00484038'}}};
-const HDR_FONT={name:'Arial',sz:14,bold:true,color:{rgb:'00F07840'}};
-const SEC_FONT={name:'Arial',sz:11,bold:true,color:{rgb:'00FFFFFF'}};
-const LABEL_FONT={name:'Arial',sz:10};
-const MONO={name:'Consolas',sz:10};
-const INPUT_STYLE={fill:YEL,font:{name:'Consolas',sz:10,color:{rgb:'000000FF'}}};
-const FORMULA_STYLE={font:{name:'Consolas',sz:10,color:{rgb:'00000000'}},numFmt:'#,##0;(#,##0);"-"'};
-const NUM_FMT='#,##0;(#,##0);"-"';
-
-function sc(ws,r,c,val,style){
-const addr=XLSX.utils.encode_cell({r,c});
-ws[addr]={v:val,t:typeof val==='number'?'n':'s'};
-if(style)Object.assign(ws[addr],{s:style});
-}
-function sf(ws,r,c,formula,style){
-const addr=XLSX.utils.encode_cell({r,c});
-ws[addr]={f:formula,t:'n'};
-if(style)Object.assign(ws[addr],{s:style});
-}
-function sm(ws,r,c,val,style){
-const addr=XLSX.utils.encode_cell({r,c});
-ws[addr]={v:val,t:'s'};
-if(style)Object.assign(ws[addr],{s:style});
-}
-
-function makeWS(rows,cols){
-const ws={};
-ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:rows,c:cols}});
-return ws;
-}
-
-function generate(){
-const name=document.getElementById('eName').value||'[ENTITY NAME]';
-const ein=document.getElementById('eEIN').value||'XX-XXXXXXX';
-const tye=document.getElementById('eTYE').value;
-const method=document.getElementById('eMethod').value;
-const fy=document.getElementById('eFY').value;
-const tyeStr=tye?new Date(tye).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'}):'[MM/DD/YYYY]';
-const n=ST.owners==='3+'?3:parseInt(ST.owners)||1;
-const owners=[];
-for(let i=0;i<n;i++){
-const nm=document.getElementById('own'+i)?.value||`[${ST.type==='1065'?'Partner':'Shareholder'} ${i+1}]`;
-const pct=parseFloat(document.getElementById('pct'+i)?.value)||Math.floor(100/n);
-owners.push({name:nm,pct});
-}
-const info={name,ein,tye:tyeStr,method,fy,owners,tier:ST.tier,type:ST.type};
-const wb=XLSX.utils.book_new();
-const tabs=getTabList();
-const generators={
-'1120':gen1120,'1120S':gen1120S,'1065':gen1065
-};
-generators[ST.type](wb,tabs,info);
-const fname=`${name.replace(/[^a-zA-Z0-9]/g,'_')}_WTB_${ST.type}.xlsx`;
-XLSX.writeFile(wb,fname);
-document.getElementById('genStatus').style.display='block';
-document.getElementById('genStatus').textContent=`Template generated: ${fname}`;
-saveHistory(info,tabs.length,fname);
-}
-
-// ═══════════════════════════════════════════════════════════════
-// 1120 C-CORP GENERATOR
-// ═══════════════════════════════════════════════════════════════
-function gen1120(wb,tabs,info){
-tabs.forEach(tab=>{
-switch(tab){
-case 'Preparer Guide': gen1120_Guide(wb,info);break;
-case 'PBC - P&L': gen1120_PnL(wb,info);break;
-case 'PBC - Balance Sheet': gen1120_BS(wb,info);break;
-case 'Strategy Inputs': gen1120_SI(wb,info);break;
-case 'Adjusting Entries': gen1120_AJE(wb,info);break;
-case 'Working Trial Balance': gen1120_WTB(wb,info);break;
-case 'Schedule M-1': gen1120_M1(wb,info);break;
-case 'Schedule L': gen1120_SchL(wb,info);break;
-case 'Schedule M-2': gen1120_M2(wb,info);break;
-case 'Schedule J': gen1120_SchJ(wb,info);break;
-case 'Schedule M-3': gen1120_M3(wb,info);break;
-}
-});
-}
-
-function hdr(ws,r,text,cols){
-sc(ws,r,0,text,{font:HDR_FONT});
-if(cols>1)ws['!merges']=(ws['!merges']||[]).concat([{s:{r,c:0},e:{r,c:cols-1}}]);
-}
-function subhdr(ws,r,text,cols){
-sc(ws,r,0,text,{font:{name:'Arial',sz:10,italic:true,color:{rgb:'008A7E70'}}});
-}
-function sechdr(ws,r,text,cols){
-for(let c=0;c<cols;c++)sc(ws,r,c,'',{fill:SEC_FILL});
-sc(ws,r,0,text,{font:SEC_FONT,fill:SEC_FILL});
-}
-
-function gen1120_Guide(wb,info){
-const ws=makeWS(30,5);
-ws['!cols']=[{wch:50},{wch:30},{wch:20},{wch:20},{wch:20}];
-hdr(ws,0,`PREPARER GUIDE — FORM 1120 (C-CORP)`,5);
-sc(ws,1,0,`${info.name} — EIN: ${info.ein} — Tax Year Ended: ${info.tye}`,{font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}}});
-sc(ws,3,0,'HOW TO USE THIS WORKBOOK',{font:{name:'Arial',sz:12,bold:true}});
-const steps=[
-'1. Enter PBC data in "PBC - P&L" and "PBC - Balance Sheet" tabs (yellow cells)',
-'2. Review Strategy Inputs tab — enter tax depreciation, §179, and adjustment amounts',
-'3. Working Trial Balance auto-populates from PBC and Strategy Inputs',
-'4. Verify all check cells show 0 (BS Check, M-1 Proof)',
-'5. Schedule M-1, L, M-2, J auto-populate from WTB',
-'6. Export final numbers to tax software',
+// -------------------------------------------------------------------
+//  PBC - BALANCE SHEET LINE ITEMS
+//  Same format as PBC_PNL_LINES
+// -------------------------------------------------------------------
+var PBC_BS_LINES = [
+  [4, 'ASSETS', true],
+  [5, 'Cash & Cash Equivalents'],
+  [6, 'Accounts Receivable (Gross)'],
+  [7, 'Less: Allowance for Doubtful Accounts'],
+  [8, 'Inventories'],
+  [9, 'Prepaid Expenses'],
+  [10, 'Investments \u2014 Govt Obligations'],
+  [11, 'Other Current Assets'],
+  [12, 'Land'],
+  [13, 'Buildings/Other Depreciable Assets'],
+  [14, 'Depreciable Assets (Cost/Basis)'],
+  [15, 'Less: Accumulated Depreciation'],
+  [16, 'Intangible Assets'],
+  [17, 'Less: Accumulated Amortization'],
+  [18, 'Other Assets'],
+  [19, 'Total Assets', false, true, 'SUM(B6:B19)'],
+  [21, 'LIABILITIES', true],
+  [22, 'Accounts Payable'],
+  [23, 'Mortgages/Notes Payable (<1 yr)'],
+  [24, 'Other Current Liabilities'],
+  [25, 'Loans from Shareholders'],
+  [26, 'Mortgages/Notes Payable (\u22651 yr)'],
+  [27, 'Other Liabilities'],
+  [28, 'Total Liabilities', false, true, 'SUM(B23:B28)'],
+  [30, 'EQUITY', true],
+  [31, 'Capital Stock'],
+  [32, 'Additional Paid-In Capital'],
+  [33, 'Retained Earnings (Prior Years)'],
+  [34, 'Retained Earnings (Current Year)', false, true, 'B20-B29-B32-B33-B34-B37'],
+  [36, 'Less: Treasury Stock'],
+  [37, 'Total Equity', false, true, 'SUM(B32:B36)-B37'],
+  [39, 'TOTAL LIABILITIES + EQUITY', false, true, 'B29+B38']
 ];
-steps.forEach((s,i)=>sc(ws,5+i,0,s,{font:{name:'Arial',sz:10}}));
-sc(ws,13,0,'COLOR CODING',{font:{name:'Arial',sz:12,bold:true}});
-sc(ws,14,0,'Yellow background + Blue font = INPUT CELL (you type here)',INPUT_STYLE);
-sc(ws,15,0,'Black font = FORMULA (do not overwrite)',FORMULA_STYLE);
-sc(ws,16,0,'Gray italic = Placeholder text (replace with your data)',{font:GRY});
-XLSX.utils.book_append_sheet(wb,ws,'Preparer Guide');
-}
 
-function gen1120_PnL(wb,info){
-const ws=makeWS(60,3);
-ws['!cols']=[{wch:45},{wch:18},{wch:20}];
-hdr(ws,0,'PBC — PROFIT & LOSS STATEMENT',3);
-sc(ws,1,0,`${info.name} (C-Corp) — Tax Year ${info.tye}`,{font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}}});
-sc(ws,3,0,'Account',{font:{name:'Arial',sz:10,bold:true}});
-sc(ws,3,1,'Amount ($)',{font:{name:'Arial',sz:10,bold:true}});
-const lines=[
-[4,'REVENUE',true],
-[5,'Gross Receipts / Sales'],
-[6,'Returns & Allowances'],
-[7,'Net Sales',false,true,'=B6+B7'],
-[8,'Equipment Rental Income'],
-[10,'COST OF GOODS SOLD',true],
-[11,'Cost of Goods Sold'],
-[12,'Gross Profit',false,true,'=B8-B12'],
-[14,'OTHER INCOME',true],
-[15,'Interest Income'],
-[16,'Dividend Income'],
-[17,'Capital Gain — Stock Sales'],
-[18,'Gain on Sale of Equipment'],
-[19,'Tax-Exempt Interest'],
-[20,'Unrealized Gain on Investments'],
-[21,'Royalties'],
-[22,'Other Income'],
-[23,'Total Other Income',false,true,'=SUM(B16:B23)'],
-[25,'OFFICER COMPENSATION',true],
-[26,'Officer Compensation'],
-[28,'SALARIES & WAGES',true],
-[29,'Salaries & Wages (non-officer)'],
-[31,'DEDUCTIONS',true],
-[32,'Repairs & Maintenance'],
-[33,'Bad Debts'],
-[34,'Rents'],
-[35,'Taxes & Licenses'],
-[36,'Interest Expense'],
-[37,'Depreciation — Vehicles (Book)'],
-[38,'Depreciation — FF&E (Book)'],
-[39,'Depreciation — Computers (Book)'],
-[40,'Depreciation — Leasehold (Book)'],
-[41,'Advertising'],
-[42,'Pension/Profit-Sharing'],
-[43,'Employee Benefit Programs'],
-[44,'Meals (Business)'],
-[45,'Entertainment'],
-[46,'Charitable Contributions'],
-[47,'Political Contributions'],
-[48,'Penalties & Fines'],
-[49,'Life Insurance (Corp Beneficiary)'],
-[50,'Club Dues'],
-[51,'Rental Activity Expenses'],
-[52,'Other Deductions'],
-[53,'Total Deductions',false,true,'=SUM(B33:B52)'],
-[55,'NET INCOME (BOOK)',false,true,'=B13+B9+B24-B27-B30-B54'],
+// -------------------------------------------------------------------
+//  WTB - ASSETS (balance sheet section)
+//  [label, pbcBSref, schLref]
+//  pbcBSref = cell ref on PBC-BS tab (e.g. "B6")
+// -------------------------------------------------------------------
+var WTB_BS_ASSETS = [
+  ['Cash & Cash Equivalents',           'B6',                       'Sch L Ln 1'],
+  ['Accounts Receivable (Gross)',        'B7',                       'Sch L Ln 2a'],
+  ['Less: Allowance for Bad Debts',      'B8',                       'Sch L Ln 2b'],
+  ['Inventories',                        'B9',                       'Sch L Ln 3'],
+  ['Prepaid Expenses',                   'B10',                      'Sch L Ln 6'],
+  ['Investments \u2014 Govt Obligations','B11',                      'Sch L Ln 5a'],
+  ['Other Current Assets',               'B12',                      'Sch L Ln 6'],
+  ['Land',                               'B13',                      'Sch L Ln 12'],
+  ['Buildings/Depreciable Assets',       "B14+'PBC - Balance Sheet'!B15", 'Sch L Ln 10a'],
+  ['Less: Accum Depreciation',           'B16',                      'Sch L Ln 10b'],
+  ['Intangible Assets',                  'B17',                      'Sch L Ln 13a'],
+  ['Less: Accum Amortization',           'B18',                      'Sch L Ln 13b'],
+  ['Other Assets',                       'B19',                      'Sch L Ln 14']
 ];
-lines.forEach(([r,label,isSection,isFormula,formula])=>{
-if(isSection){sechdr(ws,r,label,2);return}
-sc(ws,r,0,label,{font:LABEL_FONT});
-if(isFormula&&formula){sf(ws,r,1,formula,{...FORMULA_STYLE,numFmt:NUM_FMT})}
-else if(!isSection){sc(ws,r,1,null,INPUT_STYLE)}
-});
-XLSX.utils.book_append_sheet(wb,ws,'PBC - P&L');
-}
 
-function gen1120_BS(wb,info){
-const ws=makeWS(42,3);
-ws['!cols']=[{wch:45},{wch:18},{wch:20}];
-hdr(ws,0,'PBC — BALANCE SHEET',3);
-sc(ws,1,0,`${info.name} (C-Corp) — as of ${info.tye}`,{font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}}});
-sc(ws,3,0,'Account',{font:{name:'Arial',sz:10,bold:true}});
-sc(ws,3,1,'Amount ($)',{font:{name:'Arial',sz:10,bold:true}});
-const lines=[
-[4,'ASSETS',true],
-[5,'Cash & Cash Equivalents'],
-[6,'Accounts Receivable (Gross)'],
-[7,'Less: Allowance for Doubtful Accounts'],
-[8,'Inventories'],
-[9,'Prepaid Expenses'],
-[10,'Investments — Govt Obligations'],
-[11,'Other Current Assets'],
-[12,'Land'],
-[13,'Buildings/Other Depreciable Assets'],
-[14,'Depreciable Assets (Cost/Basis)'],
-[15,'Less: Accumulated Depreciation'],
-[16,'Intangible Assets'],
-[17,'Less: Accumulated Amortization'],
-[18,'Other Assets'],
-[19,'Total Assets',false,true,'=SUM(B6:B19)'],
-[21,'LIABILITIES',true],
-[22,'Accounts Payable'],
-[23,'Mortgages/Notes Payable (<1 yr)'],
-[24,'Other Current Liabilities'],
-[25,'Loans from Shareholders'],
-[26,'Mortgages/Notes Payable (≥1 yr)'],
-[27,'Other Liabilities'],
-[28,'Total Liabilities',false,true,'=SUM(B23:B28)'],
-[30,'EQUITY',true],
-[31,'Capital Stock'],
-[32,'Additional Paid-In Capital'],
-[33,'Retained Earnings (Prior Years)'],
-[34,'Retained Earnings (Current Year)',false,true,'=B20-B29-B32-B33-B34-B37'],
-[36,'Less: Treasury Stock'],
-[37,'Total Equity',false,true,'=SUM(B32:B36)-B37'],
-[39,'TOTAL LIABILITIES + EQUITY',false,true,'=B29+B38'],
+var WTB_BS_LIABILITIES = [
+  ['Accounts Payable',       'B23', 'Sch L Ln 16'],
+  ['Mortgages/Notes (<1 yr)','B24', 'Sch L Ln 17'],
+  ['Other Current Liabilities','B25','Sch L Ln 18'],
+  ['Loans from Shareholders','B26', 'Sch L Ln 19'],
+  ['Mortgages/Notes (\u22651 yr)','B27','Sch L Ln 20'],
+  ['Other Liabilities',      'B28', 'Sch L Ln 21']
 ];
-lines.forEach(([r,label,isSection,isFormula,formula])=>{
-if(isSection){sechdr(ws,r,label,2);return}
-sc(ws,r,0,label,{font:LABEL_FONT});
-if(isFormula&&formula)sf(ws,r,1,formula,{...FORMULA_STYLE,numFmt:NUM_FMT});
-else if(!isSection)sc(ws,r,1,null,INPUT_STYLE);
-});
-XLSX.utils.book_append_sheet(wb,ws,'PBC - Balance Sheet');
-}
 
-function gen1120_WTB(wb,info){
-const ws=makeWS(105,6);
-ws['!cols']=[{wch:38},{wch:16},{wch:16},{wch:16},{wch:16},{wch:18}];
-hdr(ws,0,`WORKING TRIAL BALANCE — FORM 1120 (C-CORP)`,6);
-sc(ws,1,0,`${info.name} — EIN: ${info.ein} — Tax Year Ended: ${info.tye} — ${info.method} Basis`,{font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}}});
-sc(ws,2,0,'Col A = Book (PBC)  |  Col B = Sch Adj  |  Col C = Tax Return (A+B)  |  Col D = M-1 Adj  |  Col E = Return Line',{font:{name:'Arial',sz:9,color:{rgb:'00484038'}}});
-// Column headers
-const colHdrs=['Account / Description','A: Book\n(PBC)','B: Sch Adj\n(Book→Tax)','C: Tax Return\nAmount (A+B)','D: M-1\nAdjustments','E: Ties to\n(Return Line)'];
-colHdrs.forEach((h,c)=>sc(ws,4,c,h,{font:{name:'Arial',sz:9,bold:true},alignment:{wrapText:true,horizontal:'center'}}));
-
-let R=5;
-// BS Assets
-sechdr(ws,R,'BALANCE SHEET (Assets)',6);R++;
-const bsAssets=[
-['Cash & Cash Equivalents','B6','Sch L Ln 1'],
-['Accounts Receivable (Gross)','B7','Sch L Ln 2a'],
-['Less: Allowance for Bad Debts','B8','Sch L Ln 2b'],
-['Inventories','B9','Sch L Ln 3'],
-['Prepaid Expenses','B10','Sch L Ln 6'],
-['Investments — Govt Obligations','B11','Sch L Ln 5a'],
-['Other Current Assets','B12','Sch L Ln 6'],
-['Land','B13','Sch L Ln 12'],
-['Buildings/Depreciable Assets','B14+\'PBC - Balance Sheet\'!B15','Sch L Ln 10a'],
-['Less: Accum Depreciation','B16','Sch L Ln 10b'],
-['Intangible Assets','B17','Sch L Ln 13a'],
-['Less: Accum Amortization','B18','Sch L Ln 13b'],
-['Other Assets','B19','Sch L Ln 14'],
+var WTB_BS_EQUITY = [
+  ['Capital Stock',               'B32', 'Sch L Ln 22'],
+  ['Additional Paid-In Capital',  'B33', 'Sch L Ln 23'],
+  ['Retained Earnings (Prior)',   'B34', 'Sch L Ln 25 (part)'],
+  ['Retained Earnings (Current)', 'B35', 'Sch L Ln 25 (part)'],
+  ['Less: Treasury Stock',        'B37', 'Sch L Ln 27']
 ];
-const assetStartR=R;
-bsAssets.forEach(([label,pbsRef,schL])=>{
-sc(ws,R,0,label,{font:LABEL_FONT});
-sf(ws,R,1,`='PBC - Balance Sheet'!${pbsRef}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-sc(ws,R,2,null,INPUT_STYLE);
-sf(ws,R,3,`=B${R+1}+C${R+1}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-sc(ws,R,5,schL,{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});
-R++;
-});
-// Total Assets
-sc(ws,R,0,'TOTAL ASSETS',{font:{name:'Arial',sz:10,bold:true}});
-sf(ws,R,1,`=SUM(B${assetStartR+1}:B${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-sf(ws,R,3,`=SUM(D${assetStartR+1}:D${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-sc(ws,R,5,'Sch L Ln 15',{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});
-const totalAssetsR=R;R+=2;
 
-// BS Liabilities
-sechdr(ws,R,'BALANCE SHEET (Liabilities)',6);R++;
-const bsLiab=[
-['Accounts Payable','B23','Sch L Ln 16'],
-['Mortgages/Notes (<1 yr)','B24','Sch L Ln 17'],
-['Other Current Liabilities','B25','Sch L Ln 18'],
-['Loans from Shareholders','B26','Sch L Ln 19'],
-['Mortgages/Notes (≥1 yr)','B27','Sch L Ln 20'],
-['Other Liabilities','B28','Sch L Ln 21'],
+// -------------------------------------------------------------------
+//  WTB - INCOME
+//  [label, pplRef, adjType, returnLine]
+//  adjType: ''=input, '-'=remove from OBI, 'none'=no adj cell
+// -------------------------------------------------------------------
+var WTB_INCOME = [
+  ['Gross Receipts / Sales',       'B6',  '',    'Pg 1 Ln 1a'],
+  ['Returns & Allowances',         'B7',  '',    'Pg 1 Ln 1b'],
+  ['Net Sales',                    'B8',  '',    'Pg 1 Ln 1c'],
+  ['COGS',                         'B12', '',    'Pg 1 Ln 2'],
+  ['Gross Profit',                 'B13', '',    'Pg 1 Ln 3'],
+  ['Dividends (Sch C)',            'B17', '-',   'Pg 1 Ln 4'],
+  ['Interest',                     'B16', '-',   'Pg 1 Ln 5'],
+  ['Gross Rents',                  'B9',  '-',   'Pg 1 Ln 6'],
+  ['Gross Royalties',              'B22', '',    'Pg 1 Ln 7'],
+  ['Capital Gain (Sch D)',         'B18', '-',   'Pg 1 Ln 8'],
+  ['Net Gain/Loss (Form 4797)',    'B19', '-',   'Pg 1 Ln 9'],
+  ['Other Income',                 'B23', '',    'Pg 1 Ln 10'],
+  ['Tax-Exempt Interest (REMOVE)', 'B20', '-',   'M-1 Ln 7'],
+  ['Unrealized Gain (REMOVE)',     'B21', '-',   'M-1 Ln 8']
 ];
-const liabStartR=R;
-bsLiab.forEach(([label,pbsRef,schL])=>{
-sc(ws,R,0,label,{font:LABEL_FONT});
-sf(ws,R,1,`='PBC - Balance Sheet'!${pbsRef}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-sc(ws,R,2,null,INPUT_STYLE);
-sf(ws,R,3,`=B${R+1}+C${R+1}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-sc(ws,R,5,schL,{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});
-R++;
-});
-sc(ws,R,0,'TOTAL LIABILITIES',{font:{name:'Arial',sz:10,bold:true}});
-sf(ws,R,1,`=SUM(B${liabStartR+1}:B${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-sf(ws,R,3,`=SUM(D${liabStartR+1}:D${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-const totalLiabR=R;R+=2;
 
-// BS Equity
-sechdr(ws,R,'BALANCE SHEET (Equity)',6);R++;
-const eqItems=['Capital Stock','Additional Paid-In Capital','Retained Earnings (Prior Years)','Retained Earnings (Current Year)','Less: Treasury Stock'];
-const eqPBS=['B32','B33','B34','B35','B37'];
-const eqSchL=['Sch L Ln 22','Sch L Ln 23','Sch L Ln 25 (part)','Sch L Ln 25 (part)','Sch L Ln 27'];
-const eqStartR=R;
-eqItems.forEach((label,i)=>{
-sc(ws,R,0,label,{font:LABEL_FONT});
-sf(ws,R,1,`='PBC - Balance Sheet'!${eqPBS[i]}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-sc(ws,R,2,null,INPUT_STYLE);
-sf(ws,R,3,`=B${R+1}+C${R+1}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-sc(ws,R,5,eqSchL[i],{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});
-R++;
-});
-sc(ws,R,0,'TOTAL EQUITY',{font:{name:'Arial',sz:10,bold:true}});
-sf(ws,R,1,`=SUM(B${eqStartR+1}:B${eqStartR+4})-B${eqStartR+5}`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-sf(ws,R,3,`=SUM(D${eqStartR+1}:D${eqStartR+4})-D${eqStartR+5}`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-const totalEqR=R;R++;
-// BS Check
-sc(ws,R,0,'BS CHECK (should be 0)',{font:{name:'Arial',sz:10,bold:true,color:{rgb:'00E05555'}}});
-sf(ws,R,1,`=B${totalAssetsR+1}-B${totalLiabR+1}-B${totalEqR+1}`,{font:{name:'Consolas',sz:10,bold:true,color:{rgb:'00E05555'}},numFmt:NUM_FMT});
-sf(ws,R,3,`=D${totalAssetsR+1}-D${totalLiabR+1}-D${totalEqR+1}`,{font:{name:'Consolas',sz:10,bold:true,color:{rgb:'00E05555'}},numFmt:NUM_FMT});
-const bsCheckR=R;R+=2;
-
-// Income
-sechdr(ws,R,'INCOME (Page 1)',6);R++;
-const incItems=[
-['Gross Receipts / Sales','B6','','Pg 1 Ln 1a'],
-['Returns & Allowances','B7','','Pg 1 Ln 1b'],
-['Net Sales','B8','','Pg 1 Ln 1c'],
-['COGS','B12','','Pg 1 Ln 2'],
-['Gross Profit','B13','','Pg 1 Ln 3'],
-['Dividends (Sch C)','B17','-','Pg 1 Ln 4'],
-['Interest','B16','-','Pg 1 Ln 5'],
-['Gross Rents','B9','-','Pg 1 Ln 6'],
-['Gross Royalties','B22','','Pg 1 Ln 7'],
-['Capital Gain (Sch D)','B18','-','Pg 1 Ln 8'],
-['Net Gain/Loss (Form 4797)','B19','-','Pg 1 Ln 9'],
-['Other Income','B23','','Pg 1 Ln 10'],
-['Tax-Exempt Interest (REMOVE)','B20','-','M-1 Ln 7'],
-['Unrealized Gain (REMOVE)','B21','-','M-1 Ln 8'],
+// -------------------------------------------------------------------
+//  WTB - DEDUCTIONS
+//  [label, pplRef, adjType, returnLine]
+//  adjType: '' = input Sch Adj, '-depr' = remove book depr,
+//  '-50%' = 50% disallowed, '-100%' = fully disallowed,
+//  'tax-depr' = tax depr input, 's179' = 179 input, '-rental' = remove rental
+// -------------------------------------------------------------------
+var WTB_DEDUCTIONS = [
+  ['Officer Compensation',              'B27', '',       'Pg 1 Ln 12'],
+  ['Salaries & Wages',                  'B30', '',       'Pg 1 Ln 13'],
+  ['Repairs & Maintenance',             'B33', '',       'Pg 1 Ln 14'],
+  ['Bad Debts',                         'B34', '',       'Pg 1 Ln 15'],
+  ['Rents',                             'B35', '',       'Pg 1 Ln 16'],
+  ['Taxes & Licenses',                  'B36', '',       'Pg 1 Ln 17'],
+  ['Interest',                          'B37', '',       'Pg 1 Ln 18'],
+  ['Depreciation \u2014 Vehicles (Book)','B38', '-depr', 'M-1 5b'],
+  ['Depreciation \u2014 FF&E (Book)',   'B39', '-depr',  'M-1'],
+  ['Depreciation \u2014 Computers (Book)','B40','-depr', 'M-1'],
+  ['Depreciation \u2014 Leasehold (Book)','B41','-depr', 'M-1'],
+  ['Tax Depreciation (MACRS/Bonus)',     '',   'tax-depr','Pg 1 Ln 20'],
+  ['\u00A7179 Deduction',               '',   's179',    'Pg 1 Ln 20'],
+  ['Advertising',                        'B42', '',      'Pg 1 Ln 22'],
+  ['Pension/Profit-Sharing',             'B43', '',      'Pg 1 Ln 23'],
+  ['Employee Benefit Programs',          'B44', '',      'Pg 1 Ln 24'],
+  ['Charitable Contributions',           'B47', '',      'Pg 1 Ln 19'],
+  ['Meals (Business)',                   'B45', '-50%',  'M-1 5c'],
+  ['Entertainment (100% disallowed)',    'B46', '-100%', 'M-1 5d'],
+  ['Political Contributions',           'B48', '-100%', 'M-1'],
+  ['Penalties & Fines',                  'B49', '-100%', 'M-1'],
+  ['Life Insurance',                     'B50', '-100%', 'M-1'],
+  ['Club Dues',                          'B51', '-100%', 'M-1'],
+  ['Rental Activity Expenses',           'B52', '-rental',''],
+  ['Other Deductions',                   'B53', '',      'Pg 1 Ln 26']
 ];
-const incStartR=R;
-const gpR=R+4; // Gross Profit row
-incItems.forEach(([label,pplRef,hasAdj,retLn],i)=>{
-sc(ws,R,0,label,{font:LABEL_FONT});
-sf(ws,R,1,`='PBC - P&L'!${pplRef}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-if(hasAdj==='-')sf(ws,R,2,`=-'PBC - P&L'!${pplRef}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-else sc(ws,R,2,null,INPUT_STYLE);
-sf(ws,R,3,`=B${R+1}+C${R+1}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-// M-1 column for tax-exempt and unrealized
-if(label.includes('REMOVE'))sf(ws,R,4,`='PBC - P&L'!${pplRef}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-sc(ws,R,5,retLn,{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});
-R++;
-});
-// Total Income
-sc(ws,R,0,'TOTAL INCOME (Pg 1 Ln 11)',{font:{name:'Arial',sz:10,bold:true}});
-sf(ws,R,1,`=B${gpR+1}+SUM(B${gpR+2}:B${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-sf(ws,R,2,`=SUM(C${gpR+2}:C${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-sf(ws,R,3,`=B${R+1}+C${R+1}`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-sc(ws,R,5,'Pg 1 Ln 11',{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});
-const totalIncR=R;R+=2;
 
-// Deductions
-sechdr(ws,R,'DEDUCTIONS (Page 1)',6);R++;
-const dedItems=[
-['Officer Compensation','B27','','Pg 1 Ln 12'],
-['Salaries & Wages','B30','','Pg 1 Ln 13'],
-['Repairs & Maintenance','B33','','Pg 1 Ln 14'],
-['Bad Debts','B34','','Pg 1 Ln 15'],
-['Rents','B35','','Pg 1 Ln 16'],
-['Taxes & Licenses','B36','','Pg 1 Ln 17'],
-['Interest','B37','','Pg 1 Ln 18'],
-['Depreciation — Vehicles (Book)','B38','-depr','M-1 5b'],
-['Depreciation — FF&E (Book)','B39','-depr','M-1'],
-['Depreciation — Computers (Book)','B40','-depr','M-1'],
-['Depreciation — Leasehold (Book)','B41','-depr','M-1'],
-['Tax Depreciation (MACRS/Bonus)','','tax-depr','Pg 1 Ln 20'],
-['§179 Deduction','','s179','Pg 1 Ln 20'],
-['Advertising','B42','','Pg 1 Ln 22'],
-['Pension/Profit-Sharing','B43','','Pg 1 Ln 23'],
-['Employee Benefit Programs','B44','','Pg 1 Ln 24'],
-['Charitable Contributions','B47','','Pg 1 Ln 19'],
-['Meals (Business)','B45','-50%','M-1 5c'],
-['Entertainment (100% disallowed)','B46','-100%','M-1 5d'],
-['Political Contributions','B48','-100%','M-1'],
-['Penalties & Fines','B49','-100%','M-1'],
-['Life Insurance','B50','-100%','M-1'],
-['Club Dues','B51','-100%','M-1'],
-['Rental Activity Expenses','B52','-rental',''],
-['Other Deductions','B53','','Pg 1 Ln 26'],
+// -------------------------------------------------------------------
+//  STRATEGY INPUTS - SECTION 1: Income Reclassifications
+//  [num, description, isInput, formula, note]
+//  isInput='input' -> yellow cell in col C
+//  formula -> goes in col D (auto/calc)
+// -------------------------------------------------------------------
+var SI_SEC1 = [
+  ['1','Equipment Rental Income',  '', "'PBC - P&L'!B9",       'Removes rental income from OBI'],
+  ['2','Rental Activity Expenses', 'input','',                  'Expenses for rental activity'],
+  ['3','Interest Income',          '', "'PBC - P&L'!B16",      'Move from OBI to Pg 1 Ln 5'],
+  ['4','Dividend Income',          '', "'PBC - P&L'!B17",      'Move from OBI to Pg 1 Ln 4'],
+  ['5','Capital Gain',             '', "'PBC - P&L'!B18",      'Move from OBI to Pg 1 Ln 8'],
+  ['6','Gain on Sale of Equipment','', "'PBC - P&L'!B19",      'Move from OBI to Pg 1 Ln 9'],
+  ['7','Tax-Exempt Interest',      '', "'PBC - P&L'!B20",      'Remove from income (M-1 Ln 7)'],
+  ['8','Unrealized Gain',          '', "'PBC - P&L'!B21",      'Remove from income (M-1 Ln 8)']
 ];
-const dedStartR=R;
-dedItems.forEach(([label,pplRef,adjType,retLn])=>{
-sc(ws,R,0,label,{font:LABEL_FONT});
-// Column B (Book)
-if(pplRef)sf(ws,R,1,`='PBC - P&L'!${pplRef}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-else sc(ws,R,1,0,{font:MONO,numFmt:NUM_FMT});
-// Column C (Sch Adj)
-if(adjType==='-depr')sf(ws,R,2,`=-'PBC - P&L'!${pplRef}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-else if(adjType==='-50%')sf(ws,R,2,`=-'PBC - P&L'!${pplRef}*0.5`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-else if(adjType==='-100%')sf(ws,R,2,`=-'PBC - P&L'!${pplRef}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-else if(adjType==='-rental')sf(ws,R,2,`=-'PBC - P&L'!${pplRef}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-else if(adjType==='tax-depr')sc(ws,R,2,null,INPUT_STYLE);
-else if(adjType==='s179')sc(ws,R,2,null,INPUT_STYLE);
-else sc(ws,R,2,null,INPUT_STYLE);
-// Column D (Tax = B+C)
-sf(ws,R,3,`=B${R+1}+C${R+1}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-// Column E (M-1)
-if(adjType==='-depr')sf(ws,R,4,`='PBC - P&L'!${pplRef}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-else if(adjType==='-50%')sf(ws,R,4,`='PBC - P&L'!${pplRef}*0.5`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-else if(adjType==='-100%')sf(ws,R,4,`='PBC - P&L'!${pplRef}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-else if(adjType==='tax-depr')sf(ws,R,4,`=-C${R+1}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-else if(adjType==='s179')sf(ws,R,4,`=-C${R+1}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-sc(ws,R,5,retLn,{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});
-R++;
-});
-// Total Deductions
-sc(ws,R,0,'TOTAL DEDUCTIONS (Pg 1 Ln 27)',{font:{name:'Arial',sz:10,bold:true}});
-sf(ws,R,1,`=SUM(B${dedStartR+1}:B${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-sf(ws,R,2,`=SUM(C${dedStartR+1}:C${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-sf(ws,R,3,`=B${R+1}+C${R+1}`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-const totalDedR=R;R+=2;
 
-// Taxable Income
-sechdr(ws,R,'TAXABLE INCOME COMPUTATION',6);R++;
-sc(ws,R,0,'Taxable Income Before NOL & DRD (Pg 1 Ln 28)',{font:{name:'Arial',sz:10,bold:true}});
-// M-1 proof-based taxable income
-const m1ProofR=R+8; // will be set below
-R++;
-sc(ws,R,0,'Less: NOL Deduction (Pg 1 Ln 29a)',{font:LABEL_FONT});sc(ws,R,3,null,INPUT_STYLE);R++;
-sc(ws,R,0,'Less: Dividends Received Deduction (Pg 1 Ln 29b)',{font:LABEL_FONT});sc(ws,R,3,null,INPUT_STYLE);R++;
-const nolR=R-2,drdR=R-1,taxablePreR=R-3;
-sc(ws,R,0,'TAXABLE INCOME (Pg 1 Ln 30)',{font:{name:'Arial',sz:10,bold:true}});
-sf(ws,R,3,`=D${taxablePreR+1}-D${nolR+1}-D${drdR+1}`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-const taxableR=R;R++;
-sc(ws,R,0,'Federal Tax (21%)',{font:LABEL_FONT});
-sf(ws,R,3,`=D${taxableR+1}*0.21`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-sc(ws,R,5,'Sch J Ln 2',{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});
-R+=2;
-
-// Distributions
-sechdr(ws,R,'DISTRIBUTIONS',6);R++;
-sc(ws,R,0,'Cash Dividends Paid',{font:LABEL_FONT});sc(ws,R,1,null,INPUT_STYLE);sc(ws,R,5,'M-2 Ln 5a',{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});R++;
-sc(ws,R,0,'Stock Dividends',{font:LABEL_FONT});sc(ws,R,1,null,INPUT_STYLE);R++;
-sc(ws,R,0,'Property Distributions',{font:LABEL_FONT});sc(ws,R,1,null,INPUT_STYLE);R++;
-sc(ws,R,0,'TOTAL DISTRIBUTIONS',{font:{name:'Arial',sz:10,bold:true}});
-sf(ws,R,1,`=SUM(B${R-2}:B${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-R+=2;
-
-// M-1 Proof
-sechdr(ws,R,'M-1 RECONCILIATION PROOF',6);R++;
-const proofStartR=R;
-sc(ws,R,0,'Book Net Income (M-1 Ln 1)',{font:LABEL_FONT});
-sf(ws,R,1,`='PBC - P&L'!B56`,{...FORMULA_STYLE,numFmt:NUM_FMT});R++;
-sc(ws,R,0,'Plus: M-1 Addbacks (Ln 2-5)',{font:LABEL_FONT});
-sf(ws,R,1,`=SUM(E${dedStartR+1}:E${totalDedR})`,{...FORMULA_STYLE,numFmt:NUM_FMT});R++;
-sc(ws,R,0,'Less: M-1 Deductions (Ln 7-8)',{font:LABEL_FONT});
-sf(ws,R,1,`=SUM(E${incStartR+1}:E${totalIncR})`,{...FORMULA_STYLE,numFmt:NUM_FMT});R++;
-sc(ws,R,0,'Equals: Taxable Income (Pg 1 Ln 28)',{font:{name:'Arial',sz:10,bold:true,color:{rgb:'00E05555'}}});
-sf(ws,R,1,`=B${proofStartR+1}+B${proofStartR+2}-B${proofStartR+3}`,{font:{name:'Consolas',sz:10,bold:true,color:{rgb:'00E05555'}},numFmt:NUM_FMT});
-// Now set D84 (taxablePreR) to point to this proof
-sf(ws,taxablePreR,3,`=B${R+1}`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-
-// Update ref range
-ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:R+2,c:5}});
-XLSX.utils.book_append_sheet(wb,ws,'Working Trial Balance');
-}
-
-function gen1120_SI(wb,info){
-const ws=makeWS(30,6);
-ws['!cols']=[{wch:5},{wch:35},{wch:16},{wch:16},{wch:35},{wch:15}];
-hdr(ws,0,'STRATEGY & ADJUSTMENT INPUTS',6);
-sc(ws,1,0,'Yellow cells = INPUT. Blue font = you enter this.',{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});
-sc(ws,3,0,'#',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,1,'Adjustment Description',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,2,'INPUT Amount ($)',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,3,'Auto / Calc',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,4,'What This Does',{font:{name:'Arial',sz:9,bold:true}});
-
-let R=5;
-sechdr(ws,R,'SECTION 1: PAGE 1 INCOME RECLASSIFICATIONS',6);R++;
-const sec1=[
-['1','Equipment Rental Income','','=\'PBC - P&L\'!B9','Removes rental income from OBI'],
-['2','Rental Activity Expenses','input','','Expenses for rental activity'],
-['3','Interest Income','','=\'PBC - P&L\'!B16','Move from OBI to Pg 1 Ln 5'],
-['4','Dividend Income','','=\'PBC - P&L\'!B17','Move from OBI to Pg 1 Ln 4'],
-['5','Capital Gain','','=\'PBC - P&L\'!B18','Move from OBI to Pg 1 Ln 8'],
-['6','Gain on Sale of Equipment','','=\'PBC - P&L\'!B19','Move from OBI to Pg 1 Ln 9'],
-['7','Tax-Exempt Interest','','=\'PBC - P&L\'!B20','Remove from income (M-1 Ln 7)'],
-['8','Unrealized Gain','','=\'PBC - P&L\'!B21','Remove from income (M-1 Ln 8)'],
+// SECTION 2: M-1 Nondeductible Expenses
+var SI_SEC2 = [
+  ['9', 'Meals \u2014 50% Disallowed',    '', "'PBC - P&L'!B45*0.5", 'Auto-calculates 50%'],
+  ['10','Entertainment \u2014 100%',        '', "'PBC - P&L'!B46",     '100% nondeductible'],
+  ['11','Charitable Excess (>10% limit)',   'input','',                'Enter excess over 10% limit'],
+  ['12','Political Contributions',          '', "'PBC - P&L'!B48",     'Always nondeductible'],
+  ['13','Penalties & Fines',                '', "'PBC - P&L'!B49",     'Nondeductible \u00A7162(f)'],
+  ['14','Life Insurance',                   '', "'PBC - P&L'!B50",     'Nondeductible when corp is beneficiary'],
+  ['15','Club Dues',                        '', "'PBC - P&L'!B51",     'Always nondeductible']
 ];
-sec1.forEach(([num,desc,isInput,formula,note])=>{
-sc(ws,R,0,num,{font:MONO});sc(ws,R,1,desc,{font:LABEL_FONT});
-if(isInput==='input')sc(ws,R,2,null,INPUT_STYLE);
-if(formula)sf(ws,R,3,formula,{...FORMULA_STYLE,numFmt:NUM_FMT});
-sc(ws,R,4,note,{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});
-R++;
-});R++;
-sechdr(ws,R,'SECTION 2: M-1 NONDEDUCTIBLE EXPENSES',6);R++;
-const sec2=[
-['9','Meals — 50% Disallowed','','=\'PBC - P&L\'!B45*0.5','Auto-calculates 50%'],
-['10','Entertainment — 100%','','=\'PBC - P&L\'!B46','100% nondeductible'],
-['11','Charitable Excess (>10% limit)','input','','Enter excess over 10% limit'],
-['12','Political Contributions','','=\'PBC - P&L\'!B48','Always nondeductible'],
-['13','Penalties & Fines','','=\'PBC - P&L\'!B49','Nondeductible §162(f)'],
-['14','Life Insurance','','=\'PBC - P&L\'!B50','Nondeductible when corp is beneficiary'],
-['15','Club Dues','','=\'PBC - P&L\'!B51','Always nondeductible'],
+
+// -------------------------------------------------------------------
+//  SCHEDULE M-1 LINES
+//  [lineNum, description, formulaOrType, note]
+//  formulaOrType: 'input' = yellow, 'formula:xxx' = computed, string = formula
+// -------------------------------------------------------------------
+var M1_LINES = [
+  ['1', 'Net income (loss) per books',              "'PBC - P&L'!B56",           'PBC Net Income'],
+  ['2', 'Federal income tax per books',              'input',                      'Accrued federal tax (if any)'],
+  ['3', 'Excess of capital losses over gains',       'input',                      'C-corps: net cap losses nondeductible'],
+  ['4', 'Income subject to tax not on books',        'input',                      '(Rare)'],
+  ['5a','Travel & entertainment (nondeductible)',     null,                         ''],
+  ['5b','Depreciation (book vs tax)',                 "'Strategy Inputs'!D24",     'Book depr removed'],
+  ['5c','Meals (50% disallowed)',                     "'Strategy Inputs'!D16",     '50% meals disallowance'],
+  ['5d','Entertainment (100%)',                       "'Strategy Inputs'!D17",     '100% nondeductible'],
+  ['5e','Charitable excess',                          "'Strategy Inputs'!C18",     'Amount exceeding 10% limit'],
+  ['5f','Political contributions',                    "'Strategy Inputs'!D19",     '100% nondeductible'],
+  ['5g','Penalties & fines',                          "'Strategy Inputs'!D20",     'Nondeductible \u00A7162(f)'],
+  ['5h','Life insurance',                             "'Strategy Inputs'!D21",     'Always nondeductible'],
+  ['5i','Club dues',                                  "'Strategy Inputs'!D22",     'Always nondeductible'],
+  ['6', 'Total (lines 1-5)',                          'formula:sum_above',         'Sum'],
+  ['7', 'Income on return not on books (tax-exempt)', "-'Strategy Inputs'!D13",    'Remove muni bond interest'],
+  ['8a','Tax depreciation (MACRS)',                   "-'Strategy Inputs'!C25",    'Tax depr replaces book depr'],
+  ['8b','\u00A7179 deduction',                        "-'Strategy Inputs'!C26",    '\u00A7179 added'],
+  ['9', 'Taxable income (Ln 6 - Ln 7 - Ln 8)',       'formula:m1_result',         'Should = Pg 1 Ln 28']
 ];
-sec2.forEach(([num,desc,isInput,formula,note])=>{
-sc(ws,R,0,num,{font:MONO});sc(ws,R,1,desc,{font:LABEL_FONT});
-if(isInput==='input')sc(ws,R,2,null,INPUT_STYLE);
-if(formula)sf(ws,R,3,formula,{...FORMULA_STYLE,numFmt:NUM_FMT});
-sc(ws,R,4,note,{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});
-R++;
-});R++;
-sechdr(ws,R,'SECTION 3: DEPRECIATION',6);R++;
-sc(ws,R,0,'16',{font:MONO});sc(ws,R,1,'Total Book Depreciation',{font:LABEL_FONT});
-sf(ws,R,3,"='PBC - P&L'!B38+'PBC - P&L'!B39+'PBC - P&L'!B40+'PBC - P&L'!B41",{...FORMULA_STYLE,numFmt:NUM_FMT});
-sc(ws,R,4,'Entire book depr removed, replaced by tax depr',{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});R++;
-sc(ws,R,0,'17',{font:MONO});sc(ws,R,1,'Tax Depreciation — MACRS/Bonus',{font:LABEL_FONT});
-sc(ws,R,2,null,INPUT_STYLE);
-sc(ws,R,4,'Enter total from Form 4562',{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});R++;
-sc(ws,R,0,'18',{font:MONO});sc(ws,R,1,'§179 Deduction',{font:LABEL_FONT});
-sc(ws,R,2,null,INPUT_STYLE);
-sc(ws,R,4,'Enter from 4562 Part I',{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});
 
-ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:R+2,c:5}});
-XLSX.utils.book_append_sheet(wb,ws,'Strategy Inputs');
-}
-
-function gen1120_AJE(wb,info){
-const ws=makeWS(25,6);
-ws['!cols']=[{wch:10},{wch:35},{wch:14},{wch:14},{wch:30},{wch:20}];
-hdr(ws,0,'ADJUSTING ENTRIES — Book-to-Tax Adjustments',6);
-sc(ws,1,0,`${info.name} — Tax Year ${info.tye}`,{font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}}});
-sc(ws,3,0,'AJE #',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,1,'Description',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,2,'Debit',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,3,'Credit',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,4,'Net Effect',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,5,'Source',{font:{name:'Arial',sz:9,bold:true}});
-for(let r=4;r<20;r++){
-sc(ws,r,0,`AJE-${String(r-3).padStart(2,'0')}`,{font:{name:'Consolas',sz:9,color:{rgb:'008A7E70'}}});
-sc(ws,r,1,null,INPUT_STYLE);sc(ws,r,2,null,INPUT_STYLE);sc(ws,r,3,null,INPUT_STYLE);
-sc(ws,r,4,null,{font:GRY});sc(ws,r,5,null,{font:GRY});
-}
-sc(ws,21,0,'PROOF',{font:{name:'Arial',sz:10,bold:true}});
-sc(ws,21,1,'Total DR − CR (should be 0)',{font:LABEL_FONT});
-sf(ws,21,2,'=SUM(C5:C21)',{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-sf(ws,21,3,'=SUM(D5:D21)',{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-XLSX.utils.book_append_sheet(wb,ws,'Adjusting Entries');
-}
-
-function gen1120_M1(wb,info){
-const ws=makeWS(22,4);
-ws['!cols']=[{wch:6},{wch:40},{wch:16},{wch:30}];
-hdr(ws,0,'SCHEDULE M-1 — Reconciliation of Income per Books with Income per Return',4);
-sc(ws,1,0,`Form 1120 — ${info.name}`,{font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}}});
-sc(ws,3,0,'Line',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,1,'Description',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,2,'Amount',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,3,'Source / Notes',{font:{name:'Arial',sz:9,bold:true}});
-const m1Lines=[
-['1','Net income (loss) per books',"='PBC - P&L'!B56",'PBC Net Income'],
-['2','Federal income tax per books','input','Accrued federal tax (if any)'],
-['3','Excess of capital losses over gains','input','C-corps: net cap losses nondeductible'],
-['4','Income subject to tax not on books','input','(Rare)'],
-['5a','Travel & entertainment (nondeductible)',null,''],
-['5b','Depreciation (book vs tax)',"='Strategy Inputs'!D24",'Book depr removed'],
-['5c','Meals (50% disallowed)',"='Strategy Inputs'!D16",'50% meals disallowance'],
-['5d','Entertainment (100%)',"='Strategy Inputs'!D17",'100% nondeductible'],
-['5e','Charitable excess',"='Strategy Inputs'!C18",'Amount exceeding 10% limit'],
-['5f','Political contributions',"='Strategy Inputs'!D19",'100% nondeductible'],
-['5g','Penalties & fines',"='Strategy Inputs'!D20",'Nondeductible §162(f)'],
-['5h','Life insurance',"='Strategy Inputs'!D21",'Always nondeductible'],
-['5i','Club dues',"='Strategy Inputs'!D22",'Always nondeductible'],
-['6','Total (lines 1-5)','formula','Sum'],
-['7','Income on return not on books (tax-exempt)',"=-'Strategy Inputs'!D13",'Remove muni bond interest'],
-['8a','Tax depreciation (MACRS)',"=-'Strategy Inputs'!C25",'Tax depr replaces book depr'],
-['8b','§179 deduction',"=-'Strategy Inputs'!C26",'§179 added'],
-['9','Taxable income (Ln 6 - Ln 7 - Ln 8)','formula','Should = Pg 1 Ln 28'],
+// -------------------------------------------------------------------
+//  SCHEDULE L - ASSET LINES
+//  [lineNum, description, formula (for EOY col)]
+//  formula = null -> input cell
+// -------------------------------------------------------------------
+var SCHL_ASSETS = [
+  ['1',  'Cash',                              "'PBC - Balance Sheet'!B6"],
+  ['2a', 'Trade notes & accounts receivable',  "'PBC - Balance Sheet'!B7"],
+  ['2b', 'Less: Allowance for bad debts',      "'PBC - Balance Sheet'!B8"],
+  ['3',  'Inventories',                        "'PBC - Balance Sheet'!B9"],
+  ['4',  'U.S. government obligations',        null],
+  ['5a', 'Tax-exempt securities',              "'PBC - Balance Sheet'!B11"],
+  ['6',  'Other current assets',               "'PBC - Balance Sheet'!B10+'PBC - Balance Sheet'!B12"],
+  ['7',  'Loans to shareholders',              null],
+  ['8',  'Mortgage and real estate loans',     null],
+  ['9',  'Other investments',                  "'PBC - Balance Sheet'!B19"],
+  ['10a','Buildings and other depreciable assets',"'PBC - Balance Sheet'!B14+'PBC - Balance Sheet'!B15"],
+  ['10b','Less: Accumulated depreciation',     "'PBC - Balance Sheet'!B16"],
+  ['11a','Depletable assets',                  null],
+  ['11b','Less: Accumulated depletion',        null],
+  ['12', 'Land',                               "'PBC - Balance Sheet'!B13"],
+  ['13a','Intangible assets',                  "'PBC - Balance Sheet'!B17"],
+  ['13b','Less: Accumulated amortization',     "'PBC - Balance Sheet'!B18"],
+  ['14', 'Other assets',                       "'PBC - Balance Sheet'!B19"]
 ];
-let R=4;
-m1Lines.forEach(([ln,desc,formula,note])=>{
-sc(ws,R,0,ln,{font:MONO});
-sc(ws,R,1,desc,{font:LABEL_FONT});
-if(formula==='input')sc(ws,R,2,null,INPUT_STYLE);
-else if(formula==='formula'){
-if(ln==='6')sf(ws,R,2,`=SUM(C5:C${R})`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-else if(ln==='9')sf(ws,R,2,`=C${R-3}-C${R-2}-C${R-1}-C${R}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-}else if(formula)sf(ws,R,2,formula,{...FORMULA_STYLE,numFmt:NUM_FMT});
-sc(ws,R,3,note,{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});
-R++;
-});
-ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:R,c:3}});
-XLSX.utils.book_append_sheet(wb,ws,'Schedule M-1');
-}
 
-function gen1120_SchL(wb,info){
-const ws=makeWS(35,5);
-ws['!cols']=[{wch:6},{wch:40},{wch:16},{wch:16},{wch:16}];
-hdr(ws,0,'SCHEDULE L — Balance Sheets per Books',5);
-sc(ws,1,0,`Form 1120 — ${info.name} — Tax Year ${info.tye}`,{font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}}});
-sc(ws,3,0,'Ln',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,1,'Description',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,2,'(a)/(b) BOY',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,3,'(c)/(d) EOY',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,4,'Variance',{font:{name:'Arial',sz:9,bold:true}});
-let R=4;
-sechdr(ws,R,'ASSETS',5);R++;
-const assetLines=[
-['1','Cash',"='PBC - Balance Sheet'!B6"],
-['2a','Trade notes & accounts receivable',"='PBC - Balance Sheet'!B7"],
-['2b','Less: Allowance for bad debts',"='PBC - Balance Sheet'!B8"],
-['3','Inventories',"='PBC - Balance Sheet'!B9"],
-['4','U.S. government obligations',null],
-['5a','Tax-exempt securities',"='PBC - Balance Sheet'!B11"],
-['6','Other current assets',"='PBC - Balance Sheet'!B10+'PBC - Balance Sheet'!B12"],
-['7','Loans to shareholders',null],
-['8','Mortgage and real estate loans',null],
-['9','Other investments',"='PBC - Balance Sheet'!B19"],
-['10a','Buildings and other depreciable assets',"='PBC - Balance Sheet'!B14+'PBC - Balance Sheet'!B15"],
-['10b','Less: Accumulated depreciation',"='PBC - Balance Sheet'!B16"],
-['11a','Depletable assets',null],['11b','Less: Accumulated depletion',null],
-['12','Land',"='PBC - Balance Sheet'!B13"],
-['13a','Intangible assets',"='PBC - Balance Sheet'!B17"],
-['13b','Less: Accumulated amortization',"='PBC - Balance Sheet'!B18"],
-['14','Other assets',"='PBC - Balance Sheet'!B19"],
+var SCHL_LIAB_EQ = [
+  ['16', 'Accounts payable',                          "'PBC - Balance Sheet'!B23"],
+  ['17', 'Mortgages, notes, bonds payable (<1 yr)',    "'PBC - Balance Sheet'!B24"],
+  ['18', 'Other current liabilities',                  "'PBC - Balance Sheet'!B25"],
+  ['19', 'Loans from shareholders',                    "'PBC - Balance Sheet'!B26"],
+  ['20', 'Mortgages, notes, bonds payable (\u22651 yr)','PBC - Balance Sheet\'!B27' ? "'PBC - Balance Sheet'!B27" : null],
+  ['21', 'Other liabilities',                          "'PBC - Balance Sheet'!B28"],
+  ['22', 'Capital stock',                              "'PBC - Balance Sheet'!B32"],
+  ['23', 'Additional paid-in capital',                 "'PBC - Balance Sheet'!B33"],
+  ['24', 'Retained earnings \u2014 Appropriated',      null],
+  ['25', 'Retained earnings \u2014 Unappropriated',   "'PBC - Balance Sheet'!B34+'PBC - Balance Sheet'!B35"],
+  ['26', "Adjustments to shareholders' equity",        null],
+  ['27', 'Less: Cost of treasury stock',               "'PBC - Balance Sheet'!B37"]
 ];
-const assetStartR=R;
-assetLines.forEach(([ln,desc,formula])=>{
-sc(ws,R,0,ln,{font:MONO});sc(ws,R,1,desc,{font:LABEL_FONT});
-sc(ws,R,2,null,INPUT_STYLE);
-if(formula)sf(ws,R,3,formula,{...FORMULA_STYLE,numFmt:NUM_FMT});
-else sc(ws,R,3,null,INPUT_STYLE);
-sf(ws,R,4,`=D${R+1}-C${R+1}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-R++;
-});
-sc(ws,R,0,'15',{font:MONO});sc(ws,R,1,'Total assets',{font:{name:'Arial',sz:10,bold:true}});
-sf(ws,R,2,`=SUM(C${assetStartR+1}:C${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-sf(ws,R,3,`=SUM(D${assetStartR+1}:D${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-R++;
-sechdr(ws,R,'LIABILITIES AND SHAREHOLDERS\' EQUITY',5);R++;
-const liabLines=[
-['16','Accounts payable',"='PBC - Balance Sheet'!B23"],
-['17','Mortgages, notes, bonds payable (<1 yr)',"='PBC - Balance Sheet'!B24"],
-['18','Other current liabilities',"='PBC - Balance Sheet'!B25"],
-['19','Loans from shareholders',"='PBC - Balance Sheet'!B26"],
-['20','Mortgages, notes, bonds payable (≥1 yr)',"='PBC - Balance Sheet'!B27"],
-['21','Other liabilities',"='PBC - Balance Sheet'!B28"],
-['22','Capital stock',"='PBC - Balance Sheet'!B32"],
-['23','Additional paid-in capital',"='PBC - Balance Sheet'!B33"],
-['24','Retained earnings — Appropriated',null],
-['25','Retained earnings — Unappropriated',"='PBC - Balance Sheet'!B34+'PBC - Balance Sheet'!B35"],
-['26','Adjustments to shareholders\' equity',null],
-['27','Less: Cost of treasury stock',"='PBC - Balance Sheet'!B37"],
+
+// Fix line 20 reference (the ternary was wrong)
+SCHL_LIAB_EQ[4] = ['20', 'Mortgages, notes, bonds payable (\u22651 yr)', "'PBC - Balance Sheet'!B27"];
+
+// -------------------------------------------------------------------
+//  SCHEDULE M-2 LINES
+//  [lineNum, description, formulaOrInput]
+// -------------------------------------------------------------------
+var M2_LINES = [
+  ['1', 'Balance at beginning of year',      'input'],
+  ['2', 'Net income (loss) per books',       "'PBC - P&L'!B56"],
+  ['3', 'Other increases (itemize)',          'input'],
+  ['4', 'Total of lines 1, 2, and 3',        'formula:m2_total_add'],
+  ['5a','Distributions \u2014 Cash',          'input'],
+  ['5b','Distributions \u2014 Stock',         'input'],
+  ['5c','Distributions \u2014 Property',      'input'],
+  ['6', 'Other decreases (itemize)',          'input'],
+  ['7', 'Total of lines 5 and 6',            'formula:m2_total_sub'],
+  ['8', 'Balance at end of year (Ln 4 \u2212 Ln 7)', 'formula:m2_balance']
 ];
-const liabStartR=R;
-liabLines.forEach(([ln,desc,formula])=>{
-sc(ws,R,0,ln,{font:MONO});sc(ws,R,1,desc,{font:LABEL_FONT});
-sc(ws,R,2,null,INPUT_STYLE);
-if(formula)sf(ws,R,3,formula,{...FORMULA_STYLE,numFmt:NUM_FMT});
-else sc(ws,R,3,null,INPUT_STYLE);
-sf(ws,R,4,`=D${R+1}-C${R+1}`,{...FORMULA_STYLE,numFmt:NUM_FMT});
-R++;
-});
-ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:R+2,c:4}});
-XLSX.utils.book_append_sheet(wb,ws,'Schedule L');
-}
 
-function gen1120_M2(wb,info){
-const ws=makeWS(18,4);
-ws['!cols']=[{wch:6},{wch:40},{wch:16},{wch:30}];
-hdr(ws,0,'SCHEDULE M-2 — Analysis of Unappropriated Retained Earnings',4);
-sc(ws,1,0,`Form 1120 — ${info.name} — Tax Year ${info.tye}`,{font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}}});
-sc(ws,3,0,'Line',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,1,'Description',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,2,'Amount',{font:{name:'Arial',sz:9,bold:true}});
-const m2Lines=[
-['1','Balance at beginning of year','input'],
-['2','Net income (loss) per books',"='PBC - P&L'!B56"],
-['3','Other increases (itemize)','input'],
-['4','Total of lines 1, 2, and 3','=C5+C6+C7'],
-['5a','Distributions — Cash','input'],
-['5b','Distributions — Stock','input'],
-['5c','Distributions — Property','input'],
-['6','Other decreases (itemize)','input'],
-['7','Total of lines 5 and 6','=C9+C10+C11+C12'],
-['8','Balance at end of year (Ln 4 − Ln 7)','=C8-C13'],
+// -------------------------------------------------------------------
+//  SCHEDULE J LINES
+//  [lineNum, description, formula, note]
+// -------------------------------------------------------------------
+var SCHJ_LINES = [
+  ['2', 'Income tax (21% x Pg 1 Ln 30)',     'formula:schj_tax',   'Flat 21% rate'],
+  ['3', 'Alternative minimum tax',            null,                  'AMT repealed for C-corps (post-2017)'],
+  ['4', 'Total \u2014 add lines 2 and 3',    'formula:schj_total', ''],
+  ['5a','Foreign tax credit',                 null,                  ''],
+  ['5b','General business credit',            null,                  ''],
+  ['5c','Credit for prior year min tax',      null,                  ''],
+  ['5d','Other credits',                      null,                  ''],
+  ['6', 'Total credits',                      'formula:schj_cred',  ''],
+  ['7', 'Subtract Line 6 from Line 4',       'formula:schj_net',   ''],
+  ['8', 'Personal holding company tax',       null,                  'Only if PHC']
 ];
-let R=4;
-m2Lines.forEach(([ln,desc,formula])=>{
-sc(ws,R,0,ln,{font:MONO});sc(ws,R,1,desc,{font:LABEL_FONT});
-if(formula==='input')sc(ws,R,2,null,INPUT_STYLE);
-else sf(ws,R,2,formula,{...FORMULA_STYLE,numFmt:NUM_FMT});
-R++;
-});
-sc(ws,R+1,0,'M-2 NOTES:',{font:{name:'Arial',sz:10,bold:true}});
-sc(ws,R+1,1,'Line 8 must equal Schedule L, Line 25 EOY',{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});
-ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:R+3,c:3}});
-XLSX.utils.book_append_sheet(wb,ws,'Schedule M-2');
-}
 
-function gen1120_SchJ(wb,info){
-const ws=makeWS(18,4);
-ws['!cols']=[{wch:6},{wch:40},{wch:16},{wch:30}];
-hdr(ws,0,'SCHEDULE J — TAX COMPUTATION AND PAYMENT',4);
-sc(ws,1,0,'Form 1120 — C-Corps pay tax at 21% flat rate',{font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}}});
-sc(ws,3,0,'Line',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,1,'Description',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,2,'Amount',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,3,'Notes',{font:{name:'Arial',sz:9,bold:true}});
-const jLines=[
-['2','Income tax (21% × Pg 1 Ln 30)',"='Working Trial Balance'!D"+0,'Flat 21% rate'],
-['3','Alternative minimum tax',null,'AMT repealed for C-corps (post-2017)'],
-['4','Total — add lines 2 and 3','=C5+C6',''],
-['5a','Foreign tax credit',null,''],
-['5b','General business credit',null,''],
-['5c','Credit for prior year min tax',null,''],
-['5d','Other credits',null,''],
-['6','Total credits','=SUM(C8:C11)',''],
-['7','Subtract Line 6 from Line 4','=C7-C12',''],
-['8','Personal holding company tax',null,'Only if PHC'],
+// -------------------------------------------------------------------
+//  SCHEDULE K (Pass-through) LINES
+//  [lineNum, description, source]
+// -------------------------------------------------------------------
+var SCHK_LINES = [
+  ['1',  'Ordinary business income (loss)',    'WTB'],
+  ['2',  'Net rental real estate income (loss)','WTB / Form 8825'],
+  ['3a', 'Other gross rental income (loss)',   ''],
+  ['4a', 'Guaranteed payments (services)',     ''],
+  ['4b', 'Guaranteed payments (capital)',      ''],
+  ['5',  'Interest income',                    'WTB'],
+  ['6a', 'Ordinary dividends',                 'WTB'],
+  ['7',  'Royalties',                          ''],
+  ['8',  'Net short-term capital gain (loss)', 'Sch D'],
+  ['9a', 'Net long-term capital gain (loss)',  'Sch D'],
+  ['10', 'Net \u00A71231 gain (loss)',         'Form 4797'],
+  ['11', 'Other income (loss)',                ''],
+  ['12', '\u00A7179 deduction',                'Form 4562'],
+  ['13a','Charitable contributions',           'WTB'],
+  ['13d','Other deductions',                   ''],
+  ['14a','Net earnings from self-employment',  ''],
+  ['15a','Credits',                            ''],
+  ['16a','Foreign transactions',               '']
 ];
-let R=4;
-// We need to know the WTB taxable income row - use a placeholder that will be filled
-jLines.forEach(([ln,desc,formula,note])=>{
-sc(ws,R,0,ln,{font:MONO});sc(ws,R,1,desc,{font:LABEL_FONT});
-if(formula)sf(ws,R,2,formula,{...FORMULA_STYLE,numFmt:NUM_FMT});
-else sc(ws,R,2,null,INPUT_STYLE);
-if(note)sc(ws,R,3,note,{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});
-R++;
-});
-ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:R+2,c:3}});
-XLSX.utils.book_append_sheet(wb,ws,'Schedule J');
+
+
+// =====================================================================
+//  GENERATE ENTRYPOINT
+// =====================================================================
+function generate() {
+  var name   = document.getElementById('eName').value || '[ENTITY NAME]';
+  var ein    = document.getElementById('eEIN').value || 'XX-XXXXXXX';
+  var tye    = document.getElementById('eTYE').value;
+  var method = document.getElementById('eMethod').value;
+  var fy     = document.getElementById('eFY').value;
+  var tyeStr = tye ? new Date(tye+'T12:00:00').toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'}) : '[MM/DD/YYYY]';
+  var n = ST.owners==='3+' ? 3 : parseInt(ST.owners) || 1;
+  var owners = [];
+  for (var i=0; i<n; i++) {
+    var nm  = (document.getElementById('own'+i) || {}).value || '['+(ST.type==='1065'?'Partner':'Shareholder')+' '+(i+1)+']';
+    var pct = parseFloat((document.getElementById('pct'+i) || {}).value) || Math.floor(100/n);
+    owners.push({name:nm, pct:pct});
+  }
+  var info = { name:name, ein:ein, tye:tyeStr, method:method, fy:fy, owners:owners, tier:ST.tier, type:ST.type };
+  var wb = XLSX.utils.book_new();
+  var tabs = getTabList();
+
+  // Route to the right generator per entity type
+  if (ST.type === '1120')  gen1120(wb, tabs, info);
+  else if (ST.type === '1120S') gen1120S(wb, tabs, info);
+  else if (ST.type === '1065')  gen1065(wb, tabs, info);
+
+  var fname = name.replace(/[^a-zA-Z0-9]/g,'_') + '_WTB_' + ST.type + '.xlsx';
+  XLSX.writeFile(wb, fname);
+  document.getElementById('genStatus').style.display = 'block';
+  document.getElementById('genStatus').textContent = 'Template generated: ' + fname;
+  saveHistory(info, tabs.length, fname);
 }
 
-function gen1120_M3(wb,info){
-const ws=makeWS(6,5);
-ws['!cols']=[{wch:60},{wch:16},{wch:16},{wch:16},{wch:16}];
-hdr(ws,0,'SCHEDULE M-3 — Net Income Reconciliation',5);
-sc(ws,2,0,'This tab is a PLACEHOLDER. Only required if total assets ≥ $10 million.',{font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}}});
-sc(ws,3,0,'Build out Part I (Financial Info), Part II (Income), Part III (Expense) as needed.',{font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}}});
-XLSX.utils.book_append_sheet(wb,ws,'Schedule M-3');
+
+// =====================================================================
+//  1120 C-CORP GENERATOR
+// =====================================================================
+function gen1120(wb, tabs, info) {
+  tabs.forEach(function(tab) {
+    switch(tab) {
+      case 'Preparer Guide':       gen_Guide(wb, info, '1120', 'C-Corp'); break;
+      case 'PBC - P&L':            gen_PnL(wb, info); break;
+      case 'PBC - Balance Sheet':  gen_BS(wb, info); break;
+      case 'Strategy Inputs':      gen_SI(wb, info); break;
+      case 'Adjusting Entries':    gen_AJE(wb, info); break;
+      case 'Working Trial Balance':gen_WTB(wb, info); break;
+      case 'Schedule M-1':         gen_M1(wb, info); break;
+      case 'Schedule L':           gen_SchL(wb, info); break;
+      case 'Schedule M-2':         gen_M2(wb, info); break;
+      case 'Schedule J':           gen_SchJ(wb, info); break;
+      case 'Schedule M-3':         gen_M3(wb, info); break;
+    }
+  });
 }
 
-// ═══════════════════════════════════════════════════════════════
-// 1120-S S-CORP GENERATOR
-// ═══════════════════════════════════════════════════════════════
-function gen1120S(wb,tabs,info){
-tabs.forEach(tab=>{
-switch(tab){
-case 'Instructions': genGuide(wb,info,'1120-S','S-Corp');break;
-case 'PBC - P&L': genPnL(wb,info,'1120-S');break;
-case 'PBC - Balance Sheet': gen1120_BS(wb,info);break;
-case 'Strategy Inputs': gen1120_SI(wb,info);break;
-case 'Adjusting Entries': gen1120_AJE(wb,info);break;
-case 'Working Trial Balance': genPassthruWTB(wb,info,'1120-S');break;
-case 'Schedule K': genSchK(wb,info,'1120-S');break;
-case 'Schedule M-1': gen1120_M1(wb,info);break;
-case 'Schedule L': gen1120_SchL(wb,info);break;
-case 'Schedule M-2': gen1120_M2(wb,info);break;
-case 'Form 7203': gen7203(wb,info);break;
-case 'Schedule M-3': gen1120_M3(wb,info);break;
-}
-});
-}
-
-// ═══════════════════════════════════════════════════════════════
-// 1065 PARTNERSHIP GENERATOR
-// ═══════════════════════════════════════════════════════════════
-function gen1065(wb,tabs,info){
-tabs.forEach(tab=>{
-switch(tab){
-case 'Client Books': gen1065_CB(wb,info);break;
-case 'Working Trial Balance': genPassthruWTB(wb,info,'1065');break;
-case 'Sch K Workpaper': genSchK(wb,info,'1065');break;
-case 'M-1 Workpaper': gen1120_M1(wb,info);break;
-case 'M-2 Workpaper': gen1120_M2(wb,info);break;
-case 'Adjustments Workpaper': gen1120_AJE(wb,info);break;
-case 'M-3 Workpaper': gen1120_M3(wb,info);break;
-case 'Tax Strategies': genTaxStrategies(wb,info);break;
-}
-});
+// =====================================================================
+//  1120-S S-CORP GENERATOR
+// =====================================================================
+function gen1120S(wb, tabs, info) {
+  tabs.forEach(function(tab) {
+    switch(tab) {
+      case 'Preparer Guide':       gen_Guide(wb, info, '1120-S', 'S-Corp'); break;
+      case 'PBC - P&L':            gen_PnL(wb, info); break;
+      case 'PBC - Balance Sheet':  gen_BS(wb, info); break;
+      case 'Strategy Inputs':      gen_SI(wb, info); break;
+      case 'Adjusting Entries':    gen_AJE(wb, info); break;
+      case 'Working Trial Balance':gen_WTB(wb, info); break;
+      case 'Schedule K':           gen_SchK(wb, info, '1120-S'); break;
+      case 'Schedule M-1':         gen_M1(wb, info); break;
+      case 'Schedule L':           gen_SchL(wb, info); break;
+      case 'Schedule M-2':         gen_M2(wb, info); break;
+      case 'Form 7203':            gen_7203(wb, info); break;
+      case 'Schedule M-3':         gen_M3(wb, info); break;
+    }
+  });
 }
 
-// ═══════════════════════════════════════════════════════════════
-// SHARED GENERATORS (used by 1120-S and 1065)
-// ═══════════════════════════════════════════════════════════════
-function genGuide(wb,info,formType,entityDesc){
-const ws=makeWS(20,4);
-ws['!cols']=[{wch:55},{wch:25},{wch:20},{wch:20}];
-hdr(ws,0,`PREPARER GUIDE — FORM ${formType} (${entityDesc.toUpperCase()})`,4);
-sc(ws,1,0,`${info.name} — EIN: ${info.ein} — Tax Year ${info.tye}`,{font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}}});
-sc(ws,3,0,'Yellow cells = INPUT. Blue font = you enter. Black font = formulas (do not overwrite).',{font:{name:'Arial',sz:10}});
-const steps=[
-'1. Enter PBC data in the P&L and Balance Sheet tabs',
-'2. Review Strategy Inputs and enter tax depreciation amounts',
-'3. Working Trial Balance auto-populates',
-'4. Verify check cells = 0',
-'5. Schedule K flows from WTB',
-'6. Export to tax software',
-];
-steps.forEach((s,i)=>sc(ws,5+i,0,s,{font:{name:'Arial',sz:10}}));
-XLSX.utils.book_append_sheet(wb,ws,'Instructions');
+// =====================================================================
+//  1065 PARTNERSHIP GENERATOR
+// =====================================================================
+function gen1065(wb, tabs, info) {
+  tabs.forEach(function(tab) {
+    switch(tab) {
+      case 'Preparer Guide':        gen_Guide(wb, info, '1065', 'Partnership'); break;
+      case 'PBC - P&L':             gen_PnL(wb, info); break;
+      case 'PBC - Balance Sheet':   gen_BS(wb, info); break;
+      case 'Strategy Inputs':       gen_SI(wb, info); break;
+      case 'Adjusting Entries':     gen_AJE(wb, info); break;
+      case 'Working Trial Balance': gen_WTB(wb, info); break;
+      case 'Sch K Workpaper':       gen_SchK(wb, info, '1065'); break;
+      case 'M-1 Workpaper':         gen_M1(wb, info); break;
+      case 'M-2 Workpaper':         gen_M2(wb, info); break;
+      case 'M-3 Workpaper':         gen_M3(wb, info); break;
+      case 'Tax Strategies':        gen_TaxStrat(wb, info); break;
+    }
+  });
 }
 
-function genPnL(wb,info,formType){
-// Simpler P&L for S-Corps (no dividend/investment reclassifications)
-gen1120_PnL(wb,info);
+
+// =====================================================================
+//  TAB GENERATORS
+// =====================================================================
+
+// --- Preparer Guide ---
+function gen_Guide(wb, info, formType, entityDesc) {
+  var ws = {};
+  ws['!cols'] = [{wch:50},{wch:30},{wch:20},{wch:20},{wch:20}];
+  writeHdr(ws, 0, 'PREPARER GUIDE \u2014 FORM '+formType+' ('+entityDesc.toUpperCase()+')', 5);
+  sc(ws, 1, 0, info.name+' \u2014 EIN: '+info.ein+' \u2014 Tax Year Ended: '+info.tye, S_MUTED);
+  sc(ws, 3, 0, 'HOW TO USE THIS WORKBOOK', {font:{name:'Arial',sz:12,bold:true}});
+  var steps = [
+    '1. Enter PBC data in "PBC - P&L" and "PBC - Balance Sheet" tabs (yellow cells)',
+    '2. Review Strategy Inputs tab \u2014 enter tax depreciation, \u00A7179, and adjustment amounts',
+    '3. Working Trial Balance auto-populates from PBC and Strategy Inputs',
+    '4. Verify all check cells show 0 (BS Check, M-1 Proof)',
+    '5. Schedules M-1, L, M-2, J/K auto-populate from WTB',
+    '6. Export final numbers to tax software'
+  ];
+  steps.forEach(function(s,i){ sc(ws, 5+i, 0, s, S_LABEL); });
+  sc(ws, 13, 0, 'COLOR CODING', {font:{name:'Arial',sz:12,bold:true}});
+  sc(ws, 14, 0, 'Yellow background + Blue font = INPUT CELL (you type here)', S_INPUT);
+  sc(ws, 15, 0, 'Black font = FORMULA (do not overwrite)', S_FORMULA);
+  sc(ws, 16, 0, 'Gray italic = Placeholder text (replace with your data)', S_GRAY_IT);
+  finalizeWS(ws);
+  XLSX.utils.book_append_sheet(wb, ws, 'Preparer Guide');
 }
 
-function genPassthruWTB(wb,info,formType){
-const ws=makeWS(90,6);
-ws['!cols']=[{wch:38},{wch:16},{wch:16},{wch:16},{wch:16},{wch:18}];
-const typeLabel=formType==='1065'?'FORM 1065 (PARTNERSHIP)':'FORM 1120-S (S-CORP)';
-hdr(ws,0,`WORKING TRIAL BALANCE — ${typeLabel}`,6);
-sc(ws,1,0,`${info.name} — EIN: ${info.ein} — Tax Year ${info.tye} — ${info.method} Basis`,{font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}}});
-sc(ws,2,0,'Col A = Book (PBC)  |  Col B = Adj (+)  |  Col C = Adj (-)  |  Col D = Tax Amount  |  Col E = Notes',{font:{name:'Arial',sz:9,color:{rgb:'00484038'}}});
-const colHdrs=['Account / Description','A: Book','B: Adj (+)','C: Adj (-)','D: Tax Amount\n(A+B-C)','E: Notes'];
-colHdrs.forEach((h,c)=>sc(ws,4,c,h,{font:{name:'Arial',sz:9,bold:true},alignment:{wrapText:true,horizontal:'center'}}));
+// --- PBC - P&L ---
+function gen_PnL(wb, info) {
+  var ws = {};
+  ws['!cols'] = [{wch:45},{wch:18},{wch:20}];
+  writeHdr(ws, 0, 'PBC \u2014 PROFIT & LOSS STATEMENT', 3);
+  sc(ws, 1, 0, info.name+' \u2014 Tax Year '+info.tye, S_MUTED);
+  sc(ws, 3, 0, 'Account', {font:{name:'Arial',sz:10,bold:true}});
+  sc(ws, 3, 1, 'Amount ($)', {font:{name:'Arial',sz:10,bold:true}});
 
-let R=5;
-// Simplified balance sheet section
-sechdr(ws,R,'BALANCE SHEET — ASSETS',6);R++;
-const assets=['Cash','Accounts Receivable','Inventories','Prepaid Expenses','Fixed Assets (Net)','Other Assets'];
-const assetStart=R;
-assets.forEach(a=>{
-sc(ws,R,0,a,{font:LABEL_FONT});sc(ws,R,1,null,INPUT_STYLE);sc(ws,R,2,null,INPUT_STYLE);sc(ws,R,3,null,INPUT_STYLE);
-sf(ws,R,4,`=B${R+1}+C${R+1}-D${R+1}`,{...FORMULA_STYLE,numFmt:NUM_FMT});R++;
-});
-sc(ws,R,0,'TOTAL ASSETS',{font:{name:'Arial',sz:10,bold:true}});
-sf(ws,R,1,`=SUM(B${assetStart+1}:B${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-sf(ws,R,4,`=SUM(E${assetStart+1}:E${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-const totAssetsR=R;R+=2;
+  PBC_PNL_LINES.forEach(function(line) {
+    var r = line[0], label = line[1], isSec = line[2], isFml = line[3], fml = line[4];
+    if (isSec) { writeSec(ws, r, label, 2); return; }
+    sc(ws, r, 0, label, S_LABEL);
+    if (isFml && fml) sf(ws, r, 1, fml, S_FORMULA);
+    else sc(ws, r, 1, '', S_INPUT);
+  });
 
-sechdr(ws,R,'BALANCE SHEET — LIABILITIES',6);R++;
-const liabs=['Accounts Payable','Notes Payable (<1 yr)','Other Current Liabilities','Long-Term Debt','Other Liabilities'];
-const liabStart=R;
-liabs.forEach(l=>{
-sc(ws,R,0,l,{font:LABEL_FONT});sc(ws,R,1,null,INPUT_STYLE);sc(ws,R,2,null,INPUT_STYLE);sc(ws,R,3,null,INPUT_STYLE);
-sf(ws,R,4,`=B${R+1}+C${R+1}-D${R+1}`,{...FORMULA_STYLE,numFmt:NUM_FMT});R++;
-});
-sc(ws,R,0,'TOTAL LIABILITIES',{font:{name:'Arial',sz:10,bold:true}});
-sf(ws,R,1,`=SUM(B${liabStart+1}:B${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-sf(ws,R,4,`=SUM(E${liabStart+1}:E${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-const totLiabR=R;R+=2;
-
-sechdr(ws,R,formType==='1065'?'PARTNERS\' CAPITAL':'SHAREHOLDERS\' EQUITY',6);R++;
-const capLabel=formType==='1065'?'Partner':'Shareholder';
-info.owners.forEach((o,i)=>{
-sc(ws,R,0,`${o.name} — ${capLabel} Capital (${o.pct}%)`,{font:LABEL_FONT});
-sc(ws,R,1,null,INPUT_STYLE);R++;
-});
-sc(ws,R,0,'Retained Earnings / Prior Year',{font:LABEL_FONT});sc(ws,R,1,null,INPUT_STYLE);R++;
-sc(ws,R,0,'Current Year Net Income',{font:LABEL_FONT});sc(ws,R,1,null,INPUT_STYLE);R++;
-sc(ws,R,0,'Distributions',{font:LABEL_FONT});sc(ws,R,1,null,INPUT_STYLE);R+=2;
-
-// Income
-sechdr(ws,R,'INCOME',6);R++;
-const incomeItems=['Gross Receipts / Sales','Returns & Allowances','Cost of Goods Sold','Interest Income','Dividend Income','Rental Income','Other Income'];
-const incStart=R;
-incomeItems.forEach(item=>{
-sc(ws,R,0,item,{font:LABEL_FONT});sc(ws,R,1,null,INPUT_STYLE);sc(ws,R,2,null,INPUT_STYLE);sc(ws,R,3,null,INPUT_STYLE);
-sf(ws,R,4,`=B${R+1}+C${R+1}-D${R+1}`,{...FORMULA_STYLE,numFmt:NUM_FMT});R++;
-});
-sc(ws,R,0,'TOTAL INCOME',{font:{name:'Arial',sz:10,bold:true}});
-sf(ws,R,1,`=SUM(B${incStart+1}:B${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-sf(ws,R,4,`=SUM(E${incStart+1}:E${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-R+=2;
-
-// Deductions
-sechdr(ws,R,'DEDUCTIONS',6);R++;
-const dedItems=['Officer/Guaranteed Compensation','Salaries & Wages','Repairs & Maintenance','Rents','Taxes & Licenses','Interest','Depreciation (Book)','Depreciation (Tax — MACRS)','§179 Deduction','Advertising','Pension/Retirement','Employee Benefits','Meals (50% limit)','Charitable Contributions','Other Deductions'];
-const dedStart=R;
-dedItems.forEach(item=>{
-sc(ws,R,0,item,{font:LABEL_FONT});sc(ws,R,1,null,INPUT_STYLE);sc(ws,R,2,null,INPUT_STYLE);sc(ws,R,3,null,INPUT_STYLE);
-sf(ws,R,4,`=B${R+1}+C${R+1}-D${R+1}`,{...FORMULA_STYLE,numFmt:NUM_FMT});R++;
-});
-sc(ws,R,0,'TOTAL DEDUCTIONS',{font:{name:'Arial',sz:10,bold:true}});
-sf(ws,R,1,`=SUM(B${dedStart+1}:B${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-sf(ws,R,4,`=SUM(E${dedStart+1}:E${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-
-ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:R+2,c:5}});
-XLSX.utils.book_append_sheet(wb,ws,'Working Trial Balance');
+  finalizeWS(ws);
+  XLSX.utils.book_append_sheet(wb, ws, 'PBC - P&L');
 }
 
-function genSchK(wb,info,formType){
-const ws=makeWS(40,5);
-ws['!cols']=[{wch:6},{wch:40},{wch:16},{wch:16},{wch:20}];
-const label=formType==='1065'?'Schedule K — Partners\' Distributive Share':'Schedule K — Shareholders\' Pro Rata Share';
-hdr(ws,0,label,5);
-sc(ws,1,0,`${info.name} — Tax Year ${info.tye}`,{font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}}});
-sc(ws,3,0,'Line',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,1,'Description',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,2,'Amount',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,3,'Source',{font:{name:'Arial',sz:9,bold:true}});
-const kLines=[
-['1','Ordinary business income (loss)','input','WTB'],
-['2','Net rental real estate income (loss)','input','WTB / Form 8825'],
-['3a','Other gross rental income (loss)','input',''],
-['4a','Guaranteed payments (services)','input',''],
-['4b','Guaranteed payments (capital)','input',''],
-['5','Interest income','input','WTB'],
-['6a','Ordinary dividends','input','WTB'],
-['7','Royalties','input',''],
-['8','Net short-term capital gain (loss)','input','Sch D'],
-['9a','Net long-term capital gain (loss)','input','Sch D'],
-['10','Net §1231 gain (loss)','input','Form 4797'],
-['11','Other income (loss)','input',''],
-['12','§179 deduction','input','Form 4562'],
-['13a','Charitable contributions','input','WTB'],
-['13d','Other deductions','input',''],
-['14a','Net earnings from self-employment','input',''],
-['15a','Credits','input',''],
-['16a','Foreign transactions','input',''],
-];
-let R=4;
-kLines.forEach(([ln,desc,type,source])=>{
-sc(ws,R,0,ln,{font:MONO});sc(ws,R,1,desc,{font:LABEL_FONT});
-sc(ws,R,2,null,INPUT_STYLE);
-sc(ws,R,3,source,{font:{name:'Arial',sz:9,color:{rgb:'008A7E70'}}});
-R++;
-});
-ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:R+2,c:4}});
-XLSX.utils.book_append_sheet(wb,ws,formType==='1065'?'Sch K Workpaper':'Schedule K');
+// --- PBC - Balance Sheet ---
+function gen_BS(wb, info) {
+  var ws = {};
+  ws['!cols'] = [{wch:45},{wch:18},{wch:20}];
+  writeHdr(ws, 0, 'PBC \u2014 BALANCE SHEET', 3);
+  sc(ws, 1, 0, info.name+' \u2014 as of '+info.tye, S_MUTED);
+  sc(ws, 3, 0, 'Account', {font:{name:'Arial',sz:10,bold:true}});
+  sc(ws, 3, 1, 'Amount ($)', {font:{name:'Arial',sz:10,bold:true}});
+
+  PBC_BS_LINES.forEach(function(line) {
+    var r = line[0], label = line[1], isSec = line[2], isFml = line[3], fml = line[4];
+    if (isSec) { writeSec(ws, r, label, 2); return; }
+    sc(ws, r, 0, label, S_LABEL);
+    if (isFml && fml) sf(ws, r, 1, fml, S_FORMULA);
+    else sc(ws, r, 1, '', S_INPUT);
+  });
+
+  finalizeWS(ws);
+  XLSX.utils.book_append_sheet(wb, ws, 'PBC - Balance Sheet');
 }
 
-function gen7203(wb,info){
-const ws=makeWS(30,4);
-ws['!cols']=[{wch:6},{wch:45},{wch:16},{wch:25}];
-hdr(ws,0,'FORM 7203 — S Corporation Shareholder Stock and Debt Basis',4);
-sc(ws,1,0,`${info.name} — Tax Year ${info.tye}`,{font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}}});
-let R=3;
-info.owners.forEach((o,idx)=>{
-sc(ws,R,0,`SHAREHOLDER: ${o.name} (${o.pct}%)`,{font:{name:'Arial',sz:11,bold:true,color:{rgb:'00F07840'}}});R+=2;
-sechdr(ws,R,'Part I — Shareholder Stock Basis',4);R++;
-const lines=[
-['1','Stock basis at beginning of year','input'],
-['2','Stock acquired during year','input'],
-['3','Restoration of basis','input'],
-['4','Adjusted basis before distributions','=C'+(R+1)+'+C'+(R+2)+'+C'+(R+3)],
-['5','Distributions','input'],
-['6','Stock basis before losses','=C'+(R+4)+'-C'+(R+5)],
-['7','Pro rata share of losses','input'],
-['8','Stock basis at end of year','=C'+(R+6)+'-C'+(R+7)],
-];
-lines.forEach(([ln,desc,formula])=>{
-sc(ws,R,0,ln,{font:MONO});sc(ws,R,1,desc,{font:LABEL_FONT});
-if(formula==='input')sc(ws,R,2,null,INPUT_STYLE);
-else sf(ws,R,2,formula,{...FORMULA_STYLE,numFmt:NUM_FMT});
-R++;
-});
-R+=2;
-});
-ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:R+2,c:3}});
-XLSX.utils.book_append_sheet(wb,ws,'Form 7203');
+// --- Strategy Inputs ---
+function gen_SI(wb, info) {
+  var ws = {};
+  ws['!cols'] = [{wch:5},{wch:35},{wch:16},{wch:16},{wch:35},{wch:15}];
+  writeHdr(ws, 0, 'STRATEGY & ADJUSTMENT INPUTS', 6);
+  sc(ws, 1, 0, 'Yellow cells = INPUT. Blue font = you enter this.', S_MUTED_SM);
+  sc(ws, 3, 0, '#', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 1, 'Adjustment Description', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 2, 'INPUT Amount ($)', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 3, 'Auto / Calc', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 4, 'What This Does', {font:{name:'Arial',sz:9,bold:true}});
+
+  var R = 5;
+  writeSec(ws, R, 'SECTION 1: PAGE 1 INCOME RECLASSIFICATIONS', 6); R++;
+  SI_SEC1.forEach(function(line) {
+    sc(ws, R, 0, line[0], S_MONO);
+    sc(ws, R, 1, line[1], S_LABEL);
+    if (line[2]==='input') sc(ws, R, 2, '', S_INPUT);
+    if (line[3]) sf(ws, R, 3, line[3], S_FORMULA);
+    sc(ws, R, 4, line[4], S_MUTED_SM);
+    R++;
+  });
+  R++;
+
+  writeSec(ws, R, 'SECTION 2: M-1 NONDEDUCTIBLE EXPENSES', 6); R++;
+  SI_SEC2.forEach(function(line) {
+    sc(ws, R, 0, line[0], S_MONO);
+    sc(ws, R, 1, line[1], S_LABEL);
+    if (line[2]==='input') sc(ws, R, 2, '', S_INPUT);
+    if (line[3]) sf(ws, R, 3, line[3], S_FORMULA);
+    sc(ws, R, 4, line[4], S_MUTED_SM);
+    R++;
+  });
+  R++;
+
+  writeSec(ws, R, 'SECTION 3: DEPRECIATION', 6); R++;
+  sc(ws, R, 0, '16', S_MONO); sc(ws, R, 1, 'Total Book Depreciation', S_LABEL);
+  sf(ws, R, 3, "'PBC - P&L'!B38+'PBC - P&L'!B39+'PBC - P&L'!B40+'PBC - P&L'!B41", S_FORMULA);
+  sc(ws, R, 4, 'Entire book depr removed, replaced by tax depr', S_MUTED_SM); R++;
+  sc(ws, R, 0, '17', S_MONO); sc(ws, R, 1, 'Tax Depreciation \u2014 MACRS/Bonus', S_LABEL);
+  sc(ws, R, 2, '', S_INPUT);
+  sc(ws, R, 4, 'Enter total from Form 4562', S_MUTED_SM); R++;
+  sc(ws, R, 0, '18', S_MONO); sc(ws, R, 1, '\u00A7179 Deduction', S_LABEL);
+  sc(ws, R, 2, '', S_INPUT);
+  sc(ws, R, 4, 'Enter from 4562 Part I', S_MUTED_SM);
+
+  finalizeWS(ws);
+  XLSX.utils.book_append_sheet(wb, ws, 'Strategy Inputs');
 }
 
-function gen1065_CB(wb,info){
-const ws=makeWS(50,4);
-ws['!cols']=[{wch:6},{wch:40},{wch:16},{wch:16}];
-hdr(ws,0,'CLIENT BOOKS — Trial Balance',4);
-sc(ws,1,0,`${info.name} — EIN: ${info.ein} — Tax Year ${info.tye}`,{font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}}});
-sc(ws,3,0,'#',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,1,'Account Description',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,2,'Debit',{font:{name:'Arial',sz:9,bold:true}});
-sc(ws,3,3,'Credit',{font:{name:'Arial',sz:9,bold:true}});
-let R=4;
-sechdr(ws,R,'ASSETS',4);R++;
-const accounts=['Cash','Accounts Receivable','Less: Allowance','Inventory','Prepaid Expenses','Investments','Fixed Assets (Cost)','Less: Accum Depreciation','Other Assets'];
-accounts.forEach((a,i)=>{
-sc(ws,R,0,String(i+1),{font:MONO});sc(ws,R,1,a,{font:LABEL_FONT});
-sc(ws,R,2,null,INPUT_STYLE);sc(ws,R,3,null,INPUT_STYLE);R++;
-});
-sechdr(ws,R,'LIABILITIES',4);R++;
-['Accounts Payable','Notes Payable','Other Liabilities','Long-Term Debt'].forEach((l,i)=>{
-sc(ws,R,0,String(10+i),{font:MONO});sc(ws,R,1,l,{font:LABEL_FONT});
-sc(ws,R,2,null,INPUT_STYLE);sc(ws,R,3,null,INPUT_STYLE);R++;
-});
-sechdr(ws,R,'PARTNERS\' CAPITAL',4);R++;
-info.owners.forEach((o,i)=>{
-sc(ws,R,0,String(20+i),{font:MONO});sc(ws,R,1,`${o.name} — Capital (${o.pct}%)`,{font:LABEL_FONT});
-sc(ws,R,2,null,INPUT_STYLE);sc(ws,R,3,null,INPUT_STYLE);R++;
-});
-sechdr(ws,R,'REVENUE',4);R++;
-['Gross Receipts','Returns & Allowances','Other Income'].forEach((r2,i)=>{
-sc(ws,R,0,String(30+i),{font:MONO});sc(ws,R,1,r2,{font:LABEL_FONT});
-sc(ws,R,2,null,INPUT_STYLE);sc(ws,R,3,null,INPUT_STYLE);R++;
-});
-sechdr(ws,R,'EXPENSES',4);R++;
-['COGS','Salaries & Wages','Guaranteed Payments','Rent','Taxes','Interest','Depreciation','Insurance','Advertising','Meals','Other Expenses'].forEach((e,i)=>{
-sc(ws,R,0,String(40+i),{font:MONO});sc(ws,R,1,e,{font:LABEL_FONT});
-sc(ws,R,2,null,INPUT_STYLE);sc(ws,R,3,null,INPUT_STYLE);R++;
-});R++;
-sc(ws,R,0,'',{font:MONO});sc(ws,R,1,'TOTAL',{font:{name:'Arial',sz:10,bold:true}});
-sf(ws,R,2,`=SUM(C5:C${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});
-sf(ws,R,3,`=SUM(D5:D${R})`,{font:{name:'Consolas',sz:10,bold:true},numFmt:NUM_FMT});R++;
-sc(ws,R,1,'DIFFERENCE (should be 0)',{font:{name:'Arial',sz:10,bold:true,color:{rgb:'00E05555'}}});
-sf(ws,R,2,`=C${R}-D${R}`,{font:{name:'Consolas',sz:10,bold:true,color:{rgb:'00E05555'}},numFmt:NUM_FMT});
-ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:R+2,c:3}});
-XLSX.utils.book_append_sheet(wb,ws,'Client Books');
+// --- Adjusting Entries ---
+function gen_AJE(wb, info) {
+  var ws = {};
+  ws['!cols'] = [{wch:10},{wch:35},{wch:14},{wch:14},{wch:30},{wch:20}];
+  writeHdr(ws, 0, 'ADJUSTING ENTRIES \u2014 Book-to-Tax Adjustments', 6);
+  sc(ws, 1, 0, info.name+' \u2014 Tax Year '+info.tye, S_MUTED);
+  sc(ws, 3, 0, 'AJE #', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 1, 'Description', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 2, 'Debit', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 3, 'Credit', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 4, 'Net Effect', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 5, 'Source', {font:{name:'Arial',sz:9,bold:true}});
+  for (var r=4; r<20; r++) {
+    sc(ws, r, 0, 'AJE-'+String(r-3).padStart(2,'0'), S_MUTED_SM);
+    sc(ws, r, 1, '', S_INPUT);
+    sc(ws, r, 2, '', S_INPUT);
+    sc(ws, r, 3, '', S_INPUT);
+    sc(ws, r, 4, '', S_GRAY_IT);
+    sc(ws, r, 5, '', S_GRAY_IT);
+  }
+  sc(ws, 21, 0, 'PROOF', {font:{name:'Arial',sz:10,bold:true}});
+  sc(ws, 21, 1, 'Total DR \u2212 CR (should be 0)', S_LABEL);
+  sf(ws, 21, 2, 'SUM(C5:C21)', S_FORMULA_BOLD);
+  sf(ws, 21, 3, 'SUM(D5:D21)', S_FORMULA_BOLD);
+  finalizeWS(ws);
+  XLSX.utils.book_append_sheet(wb, ws, 'Adjusting Entries');
 }
 
-function genTaxStrategies(wb,info){
-const ws=makeWS(20,3);
-ws['!cols']=[{wch:40},{wch:30},{wch:20}];
-hdr(ws,0,'TAX STRATEGIES WORKPAPER',3);
-sc(ws,1,0,`${info.name} — Tax Year ${info.tye}`,{font:{name:'Arial',sz:10,color:{rgb:'008A7E70'}}});
-sc(ws,3,0,'Strategy',{font:{name:'Arial',sz:10,bold:true}});
-sc(ws,3,1,'Notes / Status',{font:{name:'Arial',sz:10,bold:true}});
-sc(ws,3,2,'Tax Impact ($)',{font:{name:'Arial',sz:10,bold:true}});
-const strats=['§179 Expensing','Bonus Depreciation','Retirement Plan Contributions','Health Insurance Deduction','Guaranteed Payments Optimization','Income Timing (Cash Basis)','Charitable Giving Strategy','Vehicle / Equipment Planning'];
-strats.forEach((s,i)=>{
-sc(ws,4+i,0,s,{font:LABEL_FONT});
-sc(ws,4+i,1,null,{font:GRY});
-sc(ws,4+i,2,null,INPUT_STYLE);
-});
-XLSX.utils.book_append_sheet(wb,ws,'Tax Strategies');
+// --- Working Trial Balance (1120 / 1120-S / 1065 - all use same structure) ---
+function gen_WTB(wb, info) {
+  var ws = {};
+  ws['!cols'] = [{wch:38},{wch:16},{wch:16},{wch:16},{wch:16},{wch:18}];
+  var typeLabel = info.type==='1065' ? 'FORM 1065 (PARTNERSHIP)' : info.type==='1120S' ? 'FORM 1120-S (S-CORP)' : 'FORM 1120 (C-CORP)';
+  writeHdr(ws, 0, 'WORKING TRIAL BALANCE \u2014 '+typeLabel, 6);
+  sc(ws, 1, 0, info.name+' \u2014 EIN: '+info.ein+' \u2014 Tax Year Ended: '+info.tye+' \u2014 '+info.method+' Basis', S_MUTED);
+  sc(ws, 2, 0, 'Col A = Book (PBC)  |  Col B = Sch Adj  |  Col C = Tax Return (A+B)  |  Col D = M-1 Adj  |  Col E = Return Line', S_MUTED_SM);
+  var colHdrs = ['Account / Description','A: Book\n(PBC)','B: Sch Adj\n(Book\u2192Tax)','C: Tax Return\nAmount (A+B)','D: M-1\nAdjustments','E: Ties to\n(Return Line)'];
+  colHdrs.forEach(function(h,c){ sc(ws, 4, c, h, S_COL_HDR); });
+
+  var R = 5;
+
+  // === BALANCE SHEET: ASSETS ===
+  writeSec(ws, R, 'BALANCE SHEET (Assets)', 6); R++;
+  var assetStartR = R;
+  WTB_BS_ASSETS.forEach(function(item) {
+    sc(ws, R, 0, item[0], S_LABEL);
+    var ref = item[1];
+    // If ref contains +, it's a compound formula already
+    if (ref.indexOf('+') >= 0) sf(ws, R, 1, ref, S_FORMULA);
+    else sf(ws, R, 1, "'PBC - Balance Sheet'!"+ref, S_FORMULA);
+    sc(ws, R, 2, '', S_INPUT);
+    sf(ws, R, 3, 'B'+(R+1)+'+C'+(R+1), S_FORMULA);
+    sc(ws, R, 5, item[2], S_MUTED_SM);
+    R++;
+  });
+  sc(ws, R, 0, 'TOTAL ASSETS', {font:{name:'Arial',sz:10,bold:true}});
+  sf(ws, R, 1, 'SUM(B'+(assetStartR+1)+':B'+R+')', S_FORMULA_BOLD);
+  sf(ws, R, 3, 'SUM(D'+(assetStartR+1)+':D'+R+')', S_FORMULA_BOLD);
+  sc(ws, R, 5, 'Sch L Ln 15', S_MUTED_SM);
+  var totalAssetsR = R; R += 2;
+
+  // === BALANCE SHEET: LIABILITIES ===
+  writeSec(ws, R, 'BALANCE SHEET (Liabilities)', 6); R++;
+  var liabStartR = R;
+  WTB_BS_LIABILITIES.forEach(function(item) {
+    sc(ws, R, 0, item[0], S_LABEL);
+    sf(ws, R, 1, "'PBC - Balance Sheet'!"+item[1], S_FORMULA);
+    sc(ws, R, 2, '', S_INPUT);
+    sf(ws, R, 3, 'B'+(R+1)+'+C'+(R+1), S_FORMULA);
+    sc(ws, R, 5, item[2], S_MUTED_SM);
+    R++;
+  });
+  sc(ws, R, 0, 'TOTAL LIABILITIES', {font:{name:'Arial',sz:10,bold:true}});
+  sf(ws, R, 1, 'SUM(B'+(liabStartR+1)+':B'+R+')', S_FORMULA_BOLD);
+  sf(ws, R, 3, 'SUM(D'+(liabStartR+1)+':D'+R+')', S_FORMULA_BOLD);
+  var totalLiabR = R; R += 2;
+
+  // === BALANCE SHEET: EQUITY ===
+  writeSec(ws, R, 'BALANCE SHEET (Equity)', 6); R++;
+  var eqStartR = R;
+  WTB_BS_EQUITY.forEach(function(item) {
+    sc(ws, R, 0, item[0], S_LABEL);
+    sf(ws, R, 1, "'PBC - Balance Sheet'!"+item[1], S_FORMULA);
+    sc(ws, R, 2, '', S_INPUT);
+    sf(ws, R, 3, 'B'+(R+1)+'+C'+(R+1), S_FORMULA);
+    sc(ws, R, 5, item[2], S_MUTED_SM);
+    R++;
+  });
+  sc(ws, R, 0, 'TOTAL EQUITY', {font:{name:'Arial',sz:10,bold:true}});
+  sf(ws, R, 1, 'SUM(B'+(eqStartR+1)+':B'+(eqStartR+4)+')-B'+(eqStartR+5), S_FORMULA_BOLD);
+  sf(ws, R, 3, 'SUM(D'+(eqStartR+1)+':D'+(eqStartR+4)+')-D'+(eqStartR+5), S_FORMULA_BOLD);
+  var totalEqR = R; R++;
+
+  // BS Check
+  sc(ws, R, 0, 'BS CHECK (should be 0)', S_RED_BOLD);
+  sf(ws, R, 1, 'B'+(totalAssetsR+1)+'-B'+(totalLiabR+1)+'-B'+(totalEqR+1), S_RED_MONO);
+  sf(ws, R, 3, 'D'+(totalAssetsR+1)+'-D'+(totalLiabR+1)+'-D'+(totalEqR+1), S_RED_MONO);
+  R += 2;
+
+  // === INCOME ===
+  writeSec(ws, R, 'INCOME (Page 1)', 6); R++;
+  var incStartR = R;
+  var gpR = R + 4; // Gross Profit row
+  WTB_INCOME.forEach(function(item) {
+    var label = item[0], pplRef = item[1], adjType = item[2], retLn = item[3];
+    sc(ws, R, 0, label, S_LABEL);
+    sf(ws, R, 1, "'PBC - P&L'!"+pplRef, S_FORMULA);
+    // Column C (Sch Adj)
+    if (adjType === '-') sf(ws, R, 2, "-'PBC - P&L'!"+pplRef, S_FORMULA);
+    else sc(ws, R, 2, '', S_INPUT);
+    // Column D (Tax = B+C)
+    sf(ws, R, 3, 'B'+(R+1)+'+C'+(R+1), S_FORMULA);
+    // Column E (M-1) for REMOVE items
+    if (label.indexOf('REMOVE') >= 0) sf(ws, R, 4, "'PBC - P&L'!"+pplRef, S_FORMULA);
+    sc(ws, R, 5, retLn, S_MUTED_SM);
+    R++;
+  });
+  // Total Income
+  sc(ws, R, 0, 'TOTAL INCOME (Pg 1 Ln 11)', {font:{name:'Arial',sz:10,bold:true}});
+  sf(ws, R, 1, 'B'+(gpR+1)+'+SUM(B'+(gpR+2)+':B'+R+')', S_FORMULA_BOLD);
+  sf(ws, R, 2, 'SUM(C'+(gpR+2)+':C'+R+')', S_FORMULA_BOLD);
+  sf(ws, R, 3, 'B'+(R+1)+'+C'+(R+1), S_FORMULA_BOLD);
+  sc(ws, R, 5, 'Pg 1 Ln 11', S_MUTED_SM);
+  var totalIncR = R; R += 2;
+
+  // === DEDUCTIONS ===
+  writeSec(ws, R, 'DEDUCTIONS (Page 1)', 6); R++;
+  var dedStartR = R;
+  WTB_DEDUCTIONS.forEach(function(item) {
+    var label = item[0], pplRef = item[1], adjType = item[2], retLn = item[3];
+    sc(ws, R, 0, label, S_LABEL);
+    // Column B (Book)
+    if (pplRef) sf(ws, R, 1, "'PBC - P&L'!"+pplRef, S_FORMULA);
+    else sc(ws, R, 1, 0, {font:{name:'Consolas',sz:10}, numFmt:'#,##0;(#,##0);"-"'});
+    // Column C (Sch Adj)
+    if (adjType === '-depr')      sf(ws, R, 2, "-'PBC - P&L'!"+pplRef, S_FORMULA);
+    else if (adjType === '-50%')  sf(ws, R, 2, "-'PBC - P&L'!"+pplRef+"*0.5", S_FORMULA);
+    else if (adjType === '-100%') sf(ws, R, 2, "-'PBC - P&L'!"+pplRef, S_FORMULA);
+    else if (adjType === '-rental')sf(ws, R, 2, "-'PBC - P&L'!"+pplRef, S_FORMULA);
+    else sc(ws, R, 2, '', S_INPUT);
+    // Column D (Tax = B+C)
+    sf(ws, R, 3, 'B'+(R+1)+'+C'+(R+1), S_FORMULA);
+    // Column E (M-1)
+    if (adjType === '-depr')       sf(ws, R, 4, "'PBC - P&L'!"+pplRef, S_FORMULA);
+    else if (adjType === '-50%')   sf(ws, R, 4, "'PBC - P&L'!"+pplRef+"*0.5", S_FORMULA);
+    else if (adjType === '-100%')  sf(ws, R, 4, "'PBC - P&L'!"+pplRef, S_FORMULA);
+    else if (adjType === 'tax-depr') sf(ws, R, 4, '-C'+(R+1), S_FORMULA);
+    else if (adjType === 's179')     sf(ws, R, 4, '-C'+(R+1), S_FORMULA);
+    sc(ws, R, 5, retLn, S_MUTED_SM);
+    R++;
+  });
+  // Total Deductions
+  sc(ws, R, 0, 'TOTAL DEDUCTIONS (Pg 1 Ln 27)', {font:{name:'Arial',sz:10,bold:true}});
+  sf(ws, R, 1, 'SUM(B'+(dedStartR+1)+':B'+R+')', S_FORMULA_BOLD);
+  sf(ws, R, 2, 'SUM(C'+(dedStartR+1)+':C'+R+')', S_FORMULA_BOLD);
+  sf(ws, R, 3, 'B'+(R+1)+'+C'+(R+1), S_FORMULA_BOLD);
+  var totalDedR = R; R += 2;
+
+  // === TAXABLE INCOME ===
+  writeSec(ws, R, 'TAXABLE INCOME COMPUTATION', 6); R++;
+  var taxablePreR = R;
+  sc(ws, R, 0, 'Taxable Income Before NOL & DRD (Pg 1 Ln 28)', {font:{name:'Arial',sz:10,bold:true}});
+  R++; // formula set below after M-1 proof
+  sc(ws, R, 0, 'Less: NOL Deduction (Pg 1 Ln 29a)', S_LABEL); sc(ws, R, 3, '', S_INPUT); var nolR = R; R++;
+  sc(ws, R, 0, 'Less: Dividends Received Deduction (Pg 1 Ln 29b)', S_LABEL); sc(ws, R, 3, '', S_INPUT); var drdR = R; R++;
+  sc(ws, R, 0, 'TAXABLE INCOME (Pg 1 Ln 30)', {font:{name:'Arial',sz:10,bold:true}});
+  sf(ws, R, 3, 'D'+(taxablePreR+1)+'-D'+(nolR+1)+'-D'+(drdR+1), S_FORMULA_BOLD);
+  var taxableR = R; R++;
+  sc(ws, R, 0, 'Federal Tax (21%)', S_LABEL);
+  sf(ws, R, 3, 'D'+(taxableR+1)+'*0.21', S_FORMULA);
+  sc(ws, R, 5, 'Sch J Ln 2', S_MUTED_SM);
+  R += 2;
+
+  // === DISTRIBUTIONS ===
+  writeSec(ws, R, 'DISTRIBUTIONS', 6); R++;
+  sc(ws, R, 0, 'Cash Dividends Paid', S_LABEL); sc(ws, R, 1, '', S_INPUT); sc(ws, R, 5, 'M-2 Ln 5a', S_MUTED_SM); R++;
+  sc(ws, R, 0, 'Stock Dividends', S_LABEL); sc(ws, R, 1, '', S_INPUT); R++;
+  sc(ws, R, 0, 'Property Distributions', S_LABEL); sc(ws, R, 1, '', S_INPUT); R++;
+  sc(ws, R, 0, 'TOTAL DISTRIBUTIONS', {font:{name:'Arial',sz:10,bold:true}});
+  sf(ws, R, 1, 'SUM(B'+(R-2)+':B'+R+')', S_FORMULA_BOLD);
+  R += 2;
+
+  // === M-1 PROOF ===
+  writeSec(ws, R, 'M-1 RECONCILIATION PROOF', 6); R++;
+  var proofStartR = R;
+  sc(ws, R, 0, 'Book Net Income (M-1 Ln 1)', S_LABEL);
+  sf(ws, R, 1, "'PBC - P&L'!B56", S_FORMULA); R++;
+  sc(ws, R, 0, 'Plus: M-1 Addbacks (Ln 2-5)', S_LABEL);
+  sf(ws, R, 1, 'SUM(E'+(dedStartR+1)+':E'+(totalDedR)+')', S_FORMULA); R++;
+  sc(ws, R, 0, 'Less: M-1 Deductions (Ln 7-8)', S_LABEL);
+  sf(ws, R, 1, 'SUM(E'+(incStartR+1)+':E'+(totalIncR)+')', S_FORMULA); R++;
+  sc(ws, R, 0, 'Equals: Taxable Income (Pg 1 Ln 28)', S_RED_BOLD);
+  sf(ws, R, 1, 'B'+(proofStartR+1)+'+B'+(proofStartR+2)+'-B'+(proofStartR+3), S_RED_MONO);
+
+  // Set D(taxablePreR) = this proof cell
+  sf(ws, taxablePreR, 3, 'B'+(R+1), S_FORMULA_BOLD);
+
+  finalizeWS(ws);
+  XLSX.utils.book_append_sheet(wb, ws, 'Working Trial Balance');
 }
 
-// ═══════════════════════════════════════════════════════════════
-// HISTORY
-// ═══════════════════════════════════════════════════════════════
-function saveHistory(info,tabCount,fname){
-let hist=JSON.parse(localStorage.getItem('wtb_gen_history')||'[]');
-hist.unshift({name:info.name,type:info.type,tier:info.tier,tabs:tabCount,date:new Date().toISOString(),file:fname});
-if(hist.length>20)hist=hist.slice(0,20);
-localStorage.setItem('wtb_gen_history',JSON.stringify(hist));
-renderHistory();
-}
-function renderHistory(){
-const hist=JSON.parse(localStorage.getItem('wtb_gen_history')||'[]');
-const el=document.getElementById('historyList');
-if(!hist.length){el.innerHTML='<div style="font-size:12px;color:var(--t3)">No templates generated yet</div>';return}
-el.innerHTML=hist.slice(0,5).map(h=>{
-const d=new Date(h.date);
-const ds=d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-return `<div class="hist-item"><span class="hi-name">${h.name}</span><span class="hi-meta">${h.type} · ${h.tier} · ${h.tabs} tabs · ${ds}</span></div>`;
-}).join('');
+// --- Schedule M-1 ---
+function gen_M1(wb, info) {
+  var ws = {};
+  ws['!cols'] = [{wch:6},{wch:40},{wch:16},{wch:30}];
+  var tabName = info.type === '1065' ? 'M-1 Workpaper' : 'Schedule M-1';
+  writeHdr(ws, 0, 'SCHEDULE M-1 \u2014 Reconciliation of Income per Books with Income per Return', 4);
+  sc(ws, 1, 0, 'Form '+info.type+' \u2014 '+info.name, S_MUTED);
+  sc(ws, 3, 0, 'Line', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 1, 'Description', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 2, 'Amount', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 3, 'Source / Notes', {font:{name:'Arial',sz:9,bold:true}});
+
+  var R = 4;
+  var line6R = -1;
+  M1_LINES.forEach(function(line) {
+    var ln = line[0], desc = line[1], fml = line[2], note = line[3];
+    sc(ws, R, 0, ln, S_MONO);
+    sc(ws, R, 1, desc, S_LABEL);
+    if (fml === 'input') {
+      sc(ws, R, 2, '', S_INPUT);
+    } else if (fml === 'formula:sum_above') {
+      line6R = R;
+      sf(ws, R, 2, 'SUM(C5:C'+R+')', S_FORMULA);
+    } else if (fml === 'formula:m1_result') {
+      sf(ws, R, 2, 'C'+(line6R+1)+'-C'+(R-2)+'-C'+(R-1)+'-C'+R, S_FORMULA);
+    } else if (fml === null) {
+      // no value, leave empty
+    } else if (fml) {
+      sf(ws, R, 2, fml, S_FORMULA);
+    }
+    sc(ws, R, 3, note || '', S_MUTED_SM);
+    R++;
+  });
+
+  finalizeWS(ws);
+  XLSX.utils.book_append_sheet(wb, ws, tabName);
 }
 
-// ═══════════════════════════════════════════════════════════════
-// INIT
-// ═══════════════════════════════════════════════════════════════
+// --- Schedule L ---
+function gen_SchL(wb, info) {
+  var ws = {};
+  ws['!cols'] = [{wch:6},{wch:40},{wch:16},{wch:16},{wch:16}];
+  writeHdr(ws, 0, 'SCHEDULE L \u2014 Balance Sheets per Books', 5);
+  sc(ws, 1, 0, 'Form '+info.type+' \u2014 '+info.name+' \u2014 Tax Year '+info.tye, S_MUTED);
+  sc(ws, 3, 0, 'Ln', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 1, 'Description', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 2, '(a)/(b) BOY', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 3, '(c)/(d) EOY', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 4, 'Variance', {font:{name:'Arial',sz:9,bold:true}});
+
+  var R = 4;
+  writeSec(ws, R, 'ASSETS', 5); R++;
+  var assetStartR = R;
+  SCHL_ASSETS.forEach(function(line) {
+    sc(ws, R, 0, line[0], S_MONO);
+    sc(ws, R, 1, line[1], S_LABEL);
+    sc(ws, R, 2, '', S_INPUT);
+    if (line[2]) sf(ws, R, 3, line[2], S_FORMULA);
+    else sc(ws, R, 3, '', S_INPUT);
+    sf(ws, R, 4, 'D'+(R+1)+'-C'+(R+1), S_FORMULA);
+    R++;
+  });
+  sc(ws, R, 0, '15', S_MONO);
+  sc(ws, R, 1, 'Total assets', {font:{name:'Arial',sz:10,bold:true}});
+  sf(ws, R, 2, 'SUM(C'+(assetStartR+1)+':C'+R+')', S_FORMULA_BOLD);
+  sf(ws, R, 3, 'SUM(D'+(assetStartR+1)+':D'+R+')', S_FORMULA_BOLD);
+  R++;
+
+  writeSec(ws, R, "LIABILITIES AND SHAREHOLDERS' EQUITY", 5); R++;
+  var liabStartR = R;
+  SCHL_LIAB_EQ.forEach(function(line) {
+    sc(ws, R, 0, line[0], S_MONO);
+    sc(ws, R, 1, line[1], S_LABEL);
+    sc(ws, R, 2, '', S_INPUT);
+    if (line[2]) sf(ws, R, 3, line[2], S_FORMULA);
+    else sc(ws, R, 3, '', S_INPUT);
+    sf(ws, R, 4, 'D'+(R+1)+'-C'+(R+1), S_FORMULA);
+    R++;
+  });
+
+  finalizeWS(ws);
+  XLSX.utils.book_append_sheet(wb, ws, 'Schedule L');
+}
+
+// --- Schedule M-2 ---
+function gen_M2(wb, info) {
+  var ws = {};
+  ws['!cols'] = [{wch:6},{wch:40},{wch:16},{wch:30}];
+  var tabName = info.type === '1065' ? 'M-2 Workpaper' : 'Schedule M-2';
+  writeHdr(ws, 0, 'SCHEDULE M-2 \u2014 Analysis of Unappropriated Retained Earnings', 4);
+  sc(ws, 1, 0, 'Form '+info.type+' \u2014 '+info.name+' \u2014 Tax Year '+info.tye, S_MUTED);
+  sc(ws, 3, 0, 'Line', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 1, 'Description', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 2, 'Amount', {font:{name:'Arial',sz:9,bold:true}});
+
+  var R = 4;
+  M2_LINES.forEach(function(line) {
+    var ln = line[0], desc = line[1], fml = line[2];
+    sc(ws, R, 0, ln, S_MONO);
+    sc(ws, R, 1, desc, S_LABEL);
+    if (fml === 'input') {
+      sc(ws, R, 2, '', S_INPUT);
+    } else if (fml === 'formula:m2_total_add') {
+      sf(ws, R, 2, 'C5+C6+C7', S_FORMULA);
+    } else if (fml === 'formula:m2_total_sub') {
+      sf(ws, R, 2, 'C9+C10+C11+C12', S_FORMULA);
+    } else if (fml === 'formula:m2_balance') {
+      sf(ws, R, 2, 'C8-C13', S_FORMULA);
+    } else if (fml) {
+      sf(ws, R, 2, fml, S_FORMULA);
+    }
+    R++;
+  });
+
+  sc(ws, R+1, 0, 'M-2 NOTES:', {font:{name:'Arial',sz:10,bold:true}});
+  sc(ws, R+1, 1, 'Line 8 must equal Schedule L, Line 25 EOY', S_MUTED_SM);
+  finalizeWS(ws);
+  XLSX.utils.book_append_sheet(wb, ws, tabName);
+}
+
+// --- Schedule J ---
+function gen_SchJ(wb, info) {
+  var ws = {};
+  ws['!cols'] = [{wch:6},{wch:40},{wch:16},{wch:30}];
+  writeHdr(ws, 0, 'SCHEDULE J \u2014 TAX COMPUTATION AND PAYMENT', 4);
+  sc(ws, 1, 0, 'Form 1120 \u2014 C-Corps pay tax at 21% flat rate', S_MUTED);
+  sc(ws, 3, 0, 'Line', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 1, 'Description', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 2, 'Amount', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 3, 'Notes', {font:{name:'Arial',sz:9,bold:true}});
+
+  var R = 4;
+  // We need to know the WTB taxable income row - it varies by tab count
+  // For Sch J line 2, reference WTB taxable income
+  SCHJ_LINES.forEach(function(line) {
+    var ln = line[0], desc = line[1], fml = line[2], note = line[3];
+    sc(ws, R, 0, ln, S_MONO);
+    sc(ws, R, 1, desc, S_LABEL);
+    if (fml === 'formula:schj_tax') {
+      // 21% of taxable income - reference will need manual tie to WTB
+      sc(ws, R, 2, '', S_INPUT);
+      sc(ws, R, 3, 'Enter from WTB Taxable Income x 21%', S_MUTED_SM);
+    } else if (fml === 'formula:schj_total') {
+      sf(ws, R, 2, 'C5+C6', S_FORMULA);
+    } else if (fml === 'formula:schj_cred') {
+      sf(ws, R, 2, 'SUM(C8:C11)', S_FORMULA);
+    } else if (fml === 'formula:schj_net') {
+      sf(ws, R, 2, 'C7-C12', S_FORMULA);
+    } else if (fml === null) {
+      sc(ws, R, 2, '', S_INPUT);
+    } else if (fml) {
+      sf(ws, R, 2, fml, S_FORMULA);
+    }
+    if (note) sc(ws, R, 3, note, S_MUTED_SM);
+    R++;
+  });
+
+  finalizeWS(ws);
+  XLSX.utils.book_append_sheet(wb, ws, 'Schedule J');
+}
+
+// --- Schedule M-3 (placeholder) ---
+function gen_M3(wb, info) {
+  var ws = {};
+  ws['!cols'] = [{wch:60},{wch:16},{wch:16},{wch:16},{wch:16}];
+  var tabName = info.type === '1065' ? 'M-3 Workpaper' : 'Schedule M-3';
+  writeHdr(ws, 0, 'SCHEDULE M-3 \u2014 Net Income Reconciliation', 5);
+  sc(ws, 2, 0, 'This tab is a PLACEHOLDER. Only required if total assets \u2265 $10 million.', S_MUTED);
+  sc(ws, 3, 0, 'Build out Part I (Financial Info), Part II (Income), Part III (Expense) as needed.', S_MUTED);
+  finalizeWS(ws);
+  XLSX.utils.book_append_sheet(wb, ws, tabName);
+}
+
+// --- Schedule K (Pass-through: 1120-S or 1065) ---
+function gen_SchK(wb, info, formType) {
+  var ws = {};
+  ws['!cols'] = [{wch:6},{wch:40},{wch:16},{wch:16},{wch:20}];
+  var label = formType==='1065' ? "Schedule K \u2014 Partners' Distributive Share" : "Schedule K \u2014 Shareholders' Pro Rata Share";
+  var tabName = formType==='1065' ? 'Sch K Workpaper' : 'Schedule K';
+  writeHdr(ws, 0, label, 5);
+  sc(ws, 1, 0, info.name+' \u2014 Tax Year '+info.tye, S_MUTED);
+  sc(ws, 3, 0, 'Line', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 1, 'Description', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 2, 'Amount', {font:{name:'Arial',sz:9,bold:true}});
+  sc(ws, 3, 3, 'Source', {font:{name:'Arial',sz:9,bold:true}});
+
+  var R = 4;
+  SCHK_LINES.forEach(function(line) {
+    sc(ws, R, 0, line[0], S_MONO);
+    sc(ws, R, 1, line[1], S_LABEL);
+    sc(ws, R, 2, '', S_INPUT);
+    sc(ws, R, 3, line[2] || '', S_MUTED_SM);
+    R++;
+  });
+
+  finalizeWS(ws);
+  XLSX.utils.book_append_sheet(wb, ws, tabName);
+}
+
+// --- Form 7203 (S-Corp basis tracking) ---
+function gen_7203(wb, info) {
+  var ws = {};
+  ws['!cols'] = [{wch:6},{wch:45},{wch:16},{wch:25}];
+  writeHdr(ws, 0, 'FORM 7203 \u2014 S Corporation Shareholder Stock and Debt Basis', 4);
+  sc(ws, 1, 0, info.name+' \u2014 Tax Year '+info.tye, S_MUTED);
+  var R = 3;
+  info.owners.forEach(function(o) {
+    sc(ws, R, 0, 'SHAREHOLDER: '+o.name+' ('+o.pct+'%)', {font:{name:'Arial',sz:11,bold:true,color:{rgb:'00F07840'}}});
+    R += 2;
+    writeSec(ws, R, 'Part I \u2014 Shareholder Stock Basis', 4); R++;
+    var baseR = R;
+    var lines = [
+      ['1','Stock basis at beginning of year',  'input'],
+      ['2','Stock acquired during year',         'input'],
+      ['3','Restoration of basis',               'input'],
+      ['4','Adjusted basis before distributions','C'+(baseR+1)+'+C'+(baseR+2)+'+C'+(baseR+3)],
+      ['5','Distributions',                      'input'],
+      ['6','Stock basis before losses',          'C'+(baseR+4)+'-C'+(baseR+5)],
+      ['7','Pro rata share of losses',           'input'],
+      ['8','Stock basis at end of year',         'C'+(baseR+6)+'-C'+(baseR+7)]
+    ];
+    lines.forEach(function(line) {
+      sc(ws, R, 0, line[0], S_MONO);
+      sc(ws, R, 1, line[1], S_LABEL);
+      if (line[2] === 'input') sc(ws, R, 2, '', S_INPUT);
+      else sf(ws, R, 2, line[2], S_FORMULA);
+      R++;
+    });
+    R += 2;
+  });
+  finalizeWS(ws);
+  XLSX.utils.book_append_sheet(wb, ws, 'Form 7203');
+}
+
+// --- Tax Strategies ---
+function gen_TaxStrat(wb, info) {
+  var ws = {};
+  ws['!cols'] = [{wch:40},{wch:30},{wch:20}];
+  writeHdr(ws, 0, 'TAX STRATEGIES WORKPAPER', 3);
+  sc(ws, 1, 0, info.name+' \u2014 Tax Year '+info.tye, S_MUTED);
+  sc(ws, 3, 0, 'Strategy', {font:{name:'Arial',sz:10,bold:true}});
+  sc(ws, 3, 1, 'Notes / Status', {font:{name:'Arial',sz:10,bold:true}});
+  sc(ws, 3, 2, 'Tax Impact ($)', {font:{name:'Arial',sz:10,bold:true}});
+  var strats = ['\u00A7179 Expensing','Bonus Depreciation','Retirement Plan Contributions','Health Insurance Deduction','Guaranteed Payments Optimization','Income Timing (Cash Basis)','Charitable Giving Strategy','Vehicle / Equipment Planning'];
+  strats.forEach(function(s,i) {
+    sc(ws, 4+i, 0, s, S_LABEL);
+    sc(ws, 4+i, 1, '', S_GRAY_IT);
+    sc(ws, 4+i, 2, '', S_INPUT);
+  });
+  finalizeWS(ws);
+  XLSX.utils.book_append_sheet(wb, ws, 'Tax Strategies');
+}
+
+
+// =====================================================================
+//  HISTORY
+// =====================================================================
+function saveHistory(info, tabCount, fname) {
+  var hist = JSON.parse(localStorage.getItem('wtb_gen_history') || '[]');
+  hist.unshift({ name:info.name, type:info.type, tier:info.tier, tabs:tabCount, date:new Date().toISOString(), file:fname });
+  if (hist.length > 20) hist = hist.slice(0, 20);
+  localStorage.setItem('wtb_gen_history', JSON.stringify(hist));
+  renderHistory();
+}
+function renderHistory() {
+  var hist = JSON.parse(localStorage.getItem('wtb_gen_history') || '[]');
+  var el = document.getElementById('historyList');
+  if (!hist.length) { el.innerHTML = '<div style="font-size:12px;color:var(--t3)">No templates generated yet</div>'; return; }
+  el.innerHTML = hist.slice(0,5).map(function(h) {
+    var d = new Date(h.date);
+    var ds = d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    return '<div class="hist-item"><span class="hi-name">'+h.name+'</span><span class="hi-meta">'+h.type+' \u00B7 '+h.tier+' \u00B7 '+h.tabs+' tabs \u00B7 '+ds+'</span></div>';
+  }).join('');
+}
+
+// =====================================================================
+//  INIT
+// =====================================================================
 renderSteps();
 renderHistory();
-// Set default tax year end to 12/31 of current year
-const yr=new Date().getFullYear();
-document.getElementById('eTYE').value=`${yr}-12-31`;
+var yr = new Date().getFullYear();
+document.getElementById('eTYE').value = yr + '-12-31';
 </script>
 </body>
 </html>
