@@ -496,6 +496,133 @@ function buildReview() {
   document.getElementById('tabList').innerHTML = tabHtml;
 }
 
+/* ── Professional formatting applied via xlsx-js-style ── */
+/* SheetJS loses openpyxl fonts/borders on read, so we reapply here */
+var STY = {
+  title:   { font:{bold:true,sz:14,color:{rgb:"333333"}}, alignment:{horizontal:"left"} },
+  section: { font:{bold:true,sz:11,color:{rgb:"C65102"}}, fill:{patternType:"solid",fgColor:{rgb:"FDE9D9"}}, alignment:{horizontal:"left"} },
+  colHead: { font:{bold:true,sz:9,color:{rgb:"333333"}}, fill:{patternType:"solid",fgColor:{rgb:"E0E0E0"}}, alignment:{horizontal:"center"},
+             border:{top:{style:"thin",color:{rgb:"B0B0B0"}},bottom:{style:"thin",color:{rgb:"B0B0B0"}},left:{style:"thin",color:{rgb:"B0B0B0"}},right:{style:"thin",color:{rgb:"B0B0B0"}}} },
+  label:   { font:{bold:true,sz:10,name:"Calibri"}, alignment:{horizontal:"left"} },
+  normal:  { font:{sz:10,name:"Calibri"}, alignment:{horizontal:"left"} },
+  amount:  { font:{sz:10,name:"Calibri"}, numFmt:"#,##0.00;(#,##0.00);\"-\"", alignment:{horizontal:"right"},
+             border:{top:{style:"thin",color:{rgb:"D0D0D0"}},bottom:{style:"thin",color:{rgb:"D0D0D0"}},left:{style:"thin",color:{rgb:"D0D0D0"}},right:{style:"thin",color:{rgb:"D0D0D0"}}} },
+  total:   { font:{bold:true,sz:10,name:"Calibri"}, fill:{patternType:"solid",fgColor:{rgb:"F2F2F2"}}, numFmt:"#,##0.00;(#,##0.00);\"-\"", alignment:{horizontal:"right"},
+             border:{top:{style:"thin",color:{rgb:"808080"}},bottom:{style:"medium",color:{rgb:"808080"}}} },
+  totalLabel: { font:{bold:true,sz:10,name:"Calibri"}, fill:{patternType:"solid",fgColor:{rgb:"F2F2F2"}}, alignment:{horizontal:"left"},
+             border:{bottom:{style:"medium",color:{rgb:"808080"}}} },
+  entry:   { fill:{patternType:"solid",fgColor:{rgb:"FFF8E7"}}, numFmt:"#,##0.00;(#,##0.00);\"-\"", alignment:{horizontal:"right"},
+             border:{top:{style:"thin",color:{rgb:"D0D0D0"}},bottom:{style:"thin",color:{rgb:"D0D0D0"}},left:{style:"thin",color:{rgb:"D0D0D0"}},right:{style:"thin",color:{rgb:"D0D0D0"}}} },
+  entryText: { fill:{patternType:"solid",fgColor:{rgb:"FFF8E7"}}, alignment:{horizontal:"left"},
+             border:{top:{style:"thin",color:{rgb:"D0D0D0"}},bottom:{style:"thin",color:{rgb:"D0D0D0"}},left:{style:"thin",color:{rgb:"D0D0D0"}},right:{style:"thin",color:{rgb:"D0D0D0"}}} },
+  hint:    { font:{italic:true,sz:9,color:{rgb:"808080"}} },
+  acctNum: { font:{sz:9,color:{rgb:"666666"}}, alignment:{horizontal:"center"} }
+};
+
+function isSectionHeader(v) {
+  if (!v || typeof v !== 'string') return false;
+  var u = v.trim().toUpperCase();
+  var kw = ['ASSETS','LIABILITIES','EQUITY','REVENUE','INCOME','COST OF','COGS',
+    'OPERATING','DEDUCTIONS','OFFICER','DISTRIBUTIONS','RECONCILIATION',
+    'BALANCE SHEET','PAGE 1','SCHEDULE','PARTNER','OTHER','RENTAL',
+    'TAX COMP','M-1 ','M-2 ','SEPARATELY','BOOK-TO-TAX','ADJUSTMENTS','STRATEGY'];
+  for (var i = 0; i < kw.length; i++) if (u.indexOf(kw[i]) === 0) return true;
+  return false;
+}
+
+function isTotalRow(v) {
+  if (!v || typeof v !== 'string') return false;
+  var u = v.trim().toUpperCase();
+  return u.indexOf('TOTAL') !== -1 || u.indexOf('NET ') === 0 || u.indexOf('ORDINARY') !== -1 || u.indexOf('GROSS') === 0;
+}
+
+function mergeStyle(existing, add) {
+  /* Merge add into existing style, preserving fills from template */
+  var s = {};
+  if (existing) {
+    for (var k in existing) s[k] = existing[k];
+  }
+  for (var k in add) {
+    if (k === 'fill' && s.patternType) continue; // keep existing fill
+    s[k] = add[k];
+  }
+  return s;
+}
+
+function formatWorkbook(wb) {
+  for (var si = 0; si < wb.SheetNames.length; si++) {
+    var sn = wb.SheetNames[si];
+    var ws = wb.Sheets[sn];
+    if (!ws || !ws['!ref']) continue;
+    var range = XLSX.utils.decode_range(ws['!ref']);
+
+    // Set column widths
+    if (!ws['!cols']) ws['!cols'] = [];
+    // Col A wide for descriptions
+    ws['!cols'][0] = { wch: 40 };
+    for (var c = 1; c <= range.e.c && c < 12; c++) {
+      if (!ws['!cols'][c]) ws['!cols'][c] = { wch: 15 };
+    }
+
+    // Format each row
+    for (var R = range.s.r; R <= range.e.r; R++) {
+      var aAddr = XLSX.utils.encode_cell({r:R,c:0});
+      var aCell = ws[aAddr];
+      var aVal = aCell ? (aCell.v || '') : '';
+
+      // Row 0 (A1) = title
+      if (R === 0 && aCell) {
+        aCell.s = mergeStyle(aCell.s, STY.title);
+        continue;
+      }
+      // Row 1 (A2) = subtitle/hint
+      if (R === 1 && aCell && typeof aVal === 'string' && (aVal.indexOf('EIN') !== -1 || aVal.indexOf('PASTE') !== -1 || aVal.indexOf('Column') !== -1)) {
+        aCell.s = mergeStyle(aCell.s, STY.hint);
+        continue;
+      }
+
+      // Section headers
+      if (isSectionHeader(aVal)) {
+        if (aCell) aCell.s = mergeStyle(aCell.s, STY.section);
+        for (var C = 1; C <= range.e.c && C < 12; C++) {
+          var addr = XLSX.utils.encode_cell({r:R,c:C});
+          if (ws[addr]) ws[addr].s = mergeStyle(ws[addr].s, {fill:{patternType:"solid",fgColor:{rgb:"FDE9D9"}}});
+        }
+        continue;
+      }
+
+      // Total rows
+      if (isTotalRow(aVal)) {
+        if (aCell) aCell.s = mergeStyle(aCell.s, STY.totalLabel);
+        for (var C = 1; C <= range.e.c && C < 12; C++) {
+          var addr = XLSX.utils.encode_cell({r:R,c:C});
+          if (ws[addr]) ws[addr].s = mergeStyle(ws[addr].s, STY.total);
+        }
+        continue;
+      }
+
+      // Regular data rows: bold label in A, amount formatting on data columns
+      if (aCell && typeof aVal === 'string' && aVal.trim()) {
+        aCell.s = mergeStyle(aCell.s, STY.label);
+      }
+      for (var C = 1; C <= range.e.c && C < 12; C++) {
+        var addr = XLSX.utils.encode_cell({r:R,c:C});
+        var cell = ws[addr];
+        if (!cell) continue;
+        // If cell has a cream fill (data entry), keep it but add formatting
+        var hasCream = cell.s && cell.s.fgColor && cell.s.fgColor.rgb === 'FFF8E7';
+        if (hasCream) {
+          cell.s = mergeStyle(cell.s, STY.entry);
+        } else if (cell.v !== undefined && cell.v !== null && cell.v !== '') {
+          cell.s = mergeStyle(cell.s, STY.amount);
+        } else if (cell.f) {
+          cell.s = mergeStyle(cell.s, STY.amount);
+        }
+      }
+    }
+  }
+}
+
 /* ── Hide excess blank rows based on account counts ── */
 /* Uses SheetJS !rows array to set hidden:true on unused rows */
 function hideExcessRows(wb, ac) {
@@ -647,6 +774,10 @@ async function generate() {
         }
       }
     }
+
+    // Apply professional formatting (bold labels, borders, section shading, number formats)
+    statusEl.textContent = 'Applying formatting...';
+    formatWorkbook(wb);
 
     // Hide excess rows based on account counts
     statusEl.textContent = 'Sizing account rows...';
