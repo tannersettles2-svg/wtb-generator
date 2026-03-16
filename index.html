@@ -195,10 +195,41 @@ h2{font-family:var(--disp);font-weight:600;font-size:28px;margin-bottom:8px}
 </div>
 </div>
 
-<!-- Step 3: Entity Details -->
+<!-- Step 3: Account Structure -->
 <div class="panel" id="p3">
+<h2>Account Structure</h2>
+<p class="sub">How many accounts does the client's chart of accounts have? This sizes the PBC data entry rows. Leave defaults if unsure.</p>
+<div class="review-box">
+<h3>Balance Sheet</h3>
+<div class="row3">
+<div class="field"><label>Asset Accounts</label><input id="acAssets" type="number" value="15" min="1" max="80"></div>
+<div class="field"><label>Liability Accounts</label><input id="acLiab" type="number" value="10" min="1" max="40"></div>
+<div class="field"><label>Equity Accounts</label><input id="acEquity" type="number" value="5" min="1" max="20"></div>
+</div>
+</div>
+<div class="review-box">
+<h3>Profit & Loss</h3>
+<div class="row3">
+<div class="field"><label>Revenue Accounts</label><input id="acRev" type="number" value="4" min="1" max="20"></div>
+<div class="field"><label>COGS Sub-Accounts</label><input id="acCogs" type="number" value="3" min="0" max="15"></div>
+<div class="field"><label>Expense Accounts</label><input id="acExp" type="number" value="25" min="1" max="60"></div>
+</div>
+<div class="row3" style="margin-top:14px">
+<div class="field"><label>Other Income Accounts</label><input id="acOI" type="number" value="3" min="0" max="15"></div>
+<div class="field"><label>Other Expense Accounts</label><input id="acOE" type="number" value="2" min="0" max="15"></div>
+<div class="field"></div>
+</div>
+</div>
+<div class="nav">
+<button class="btn btn-secondary" onclick="prev()">Back</button>
+<button class="btn btn-primary" onclick="next()">Continue</button>
+</div>
+</div>
+
+<!-- Step 4: Entity Details -->
+<div class="panel" id="p4">
 <h2>Entity Details</h2>
-<p class="sub">This information pre-fills your template headers. Yellow cells will still need manual entry.</p>
+<p class="sub">This information pre-fills your template headers. Cream-shaded cells will still need manual entry.</p>
 <div class="row2">
 <div class="field"><label>Entity Name</label><input id="eName" placeholder="e.g. Granite Ridge Holdings Inc."></div>
 <div class="field"><label>EIN</label><input id="eEIN" placeholder="XX-XXXXXXX" maxlength="10"></div>
@@ -219,8 +250,8 @@ h2{font-family:var(--disp);font-weight:600;font-size:28px;margin-bottom:8px}
 </div>
 </div>
 
-<!-- Step 4: Review & Generate -->
-<div class="panel" id="p4">
+<!-- Step 5: Review & Generate -->
+<div class="panel" id="p5">
 <h2>Review & Generate</h2>
 <p class="sub">Confirm the details below, then generate your template.</p>
 <div class="review-box" id="reviewSummary"></div>
@@ -246,8 +277,8 @@ h2{font-family:var(--disp);font-weight:600;font-size:28px;margin-bottom:8px}
 /* ── State ── */
 var ST = { type:null, assets:null, revenue:null, owners:null, adj:null, obi:null };
 var step = 1;
-var TOTAL_STEPS = 4;
-var STEP_NAMES = ['Entity Type','Complexity','Entity Details','Review & Generate'];
+var TOTAL_STEPS = 5;
+var STEP_NAMES = ['Entity Type','Complexity','Account Structure','Entity Details','Review & Generate'];
 
 /* ── Template files ── */
 var TEMPLATE_FILES = {
@@ -351,8 +382,8 @@ function showPanel() {
   for (var i = 0; i < panels.length; i++) panels[i].classList.remove('active');
   document.getElementById('p' + step).classList.add('active');
   renderSteps();
-  if (step === 3) buildOwnerFields();
-  if (step === 4) buildReview();
+  if (step === 4) buildOwnerFields();
+  if (step === 5) buildReview();
 }
 
 function next() {
@@ -434,6 +465,10 @@ function buildReview() {
   html += '<div class="review-row"><span class="rl">METHOD</span><span class="rv">' + method + '</span></div>';
   html += '<div class="review-row"><span class="rl">YEAR TYPE</span><span class="rv">' + fy + '</span></div>';
   html += '<div class="review-row"><span class="rl">TEMPLATE TIER</span><span class="rv"><span class="tier-badge tier-' + tier + '">' + tier.toUpperCase() + '</span></span></div>';
+  // Account structure summary
+  var bsTotal = (parseInt(document.getElementById('acAssets').value)||15) + (parseInt(document.getElementById('acLiab').value)||10) + (parseInt(document.getElementById('acEquity').value)||5);
+  var plTotal = (parseInt(document.getElementById('acRev').value)||4) + (parseInt(document.getElementById('acCogs').value)||3) + (parseInt(document.getElementById('acExp').value)||25) + (parseInt(document.getElementById('acOI').value)||3) + (parseInt(document.getElementById('acOE').value)||2);
+  html += '<div class="review-row"><span class="rl">ACCOUNTS</span><span class="rv">BS: ' + bsTotal + ' / P&L: ' + plTotal + '</span></div>';
   document.getElementById('reviewSummary').innerHTML = html;
 
   var allTabs = TABS[ST.type];
@@ -443,6 +478,60 @@ function buildReview() {
     tabHtml += '<span class="tab-tag' + (included ? ' included' : '') + '">' + tabName + '</span>';
   }
   document.getElementById('tabList').innerHTML = tabHtml;
+}
+
+/* ── Hide excess blank rows based on account counts ── */
+/* Uses SheetJS !rows array to set hidden:true on unused rows */
+function hideExcessRows(wb, ac) {
+  // Row hiding config per template type
+  // Format: [sheetName, sectionStartRow (0-indexed), maxRows, acField]
+  var ROW_MAP = {
+    '1120S': [
+      // PBC - P&L2: rows 4-62 = 59 slots (0-indexed: 3-61)
+      ['PBC - P&L2', 3, 59, function(ac) { return ac.rev + ac.cogs + ac.exp + ac.oi + ac.oe + 5; }],
+      // PBC- Balance Sheet: rows 4-87 = 84 slots (0-indexed: 3-86)
+      ['PBC- Balance Sheet', 3, 84, function(ac) { return ac.assets + ac.liab + ac.equity + 5; }],
+      // P&L Working: Revenue rows 7-10 (idx 6-9), COGS 13-15 (idx 12-14), Expenses 19-49 (idx 18-48), Other 53-61 (idx 52-60)
+      ['P&L', 18, 31, function(ac) { return ac.exp; }]
+    ],
+    '1065': [
+      // Client Books: Assets 6-35 (idx 5-34)=30, Liab 37-48 (idx 36-47)=12, Equity 50-55 (idx 49-54)=6
+      // Revenue 57-74 (idx 56-73)=18, COGS 76-82 (idx 75-81)=7, OpEx 84-128 (idx 83-127)=45
+      ['Client Books', 5, 30, function(ac) { return ac.assets; }],
+      ['Client Books', 36, 12, function(ac) { return ac.liab; }],
+      ['Client Books', 56, 18, function(ac) { return ac.rev; }],
+      ['Client Books', 75, 7, function(ac) { return ac.cogs; }],
+      ['Client Books', 83, 45, function(ac) { return ac.exp; }]
+    ],
+    '1120': [
+      // PBC - P&L and PBC - Balance Sheet follow similar patterns
+      ['PBC - P&L', 5, 50, function(ac) { return ac.rev + ac.cogs + ac.exp + ac.oi + ac.oe + 5; }],
+      ['PBC - Balance Sheet', 5, 60, function(ac) { return ac.assets + ac.liab + ac.equity + 5; }]
+    ]
+  };
+
+  var maps = ROW_MAP[ST.type] || [];
+  for (var m = 0; m < maps.length; m++) {
+    var sheetName = maps[m][0];
+    var startRow = maps[m][1];
+    var maxSlots = maps[m][2];
+    var neededFn = maps[m][3];
+    var needed = neededFn(ac);
+
+    var ws = wb.Sheets[sheetName];
+    if (!ws) continue;
+
+    // Initialize !rows array if needed
+    if (!ws['!rows']) ws['!rows'] = [];
+
+    // Hide rows from (startRow + needed) to (startRow + maxSlots - 1)
+    var hideFrom = startRow + needed;
+    var hideTo = startRow + maxSlots;
+    for (var r = hideFrom; r < hideTo; r++) {
+      if (!ws['!rows'][r]) ws['!rows'][r] = {};
+      ws['!rows'][r].hidden = true;
+    }
+  }
 }
 
 /* ── Generate: fetch template, strip tabs, fill entity info, download ── */
@@ -542,6 +631,20 @@ async function generate() {
         }
       }
     }
+
+    // Hide excess rows based on account counts
+    statusEl.textContent = 'Sizing account rows...';
+    var ac = {
+      assets:  parseInt(document.getElementById('acAssets').value) || 15,
+      liab:    parseInt(document.getElementById('acLiab').value) || 10,
+      equity:  parseInt(document.getElementById('acEquity').value) || 5,
+      rev:     parseInt(document.getElementById('acRev').value) || 4,
+      cogs:    parseInt(document.getElementById('acCogs').value) || 3,
+      exp:     parseInt(document.getElementById('acExp').value) || 25,
+      oi:      parseInt(document.getElementById('acOI').value) || 3,
+      oe:      parseInt(document.getElementById('acOE').value) || 2
+    };
+    hideExcessRows(wb, ac);
 
     statusEl.textContent = 'Building Excel file...';
 
