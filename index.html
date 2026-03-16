@@ -623,6 +623,57 @@ function formatWorkbook(wb) {
   }
 }
 
+/* ── Fill blank entry cells with placeholder for conditional formatting ── */
+/* Puts "--" in empty data-entry cells on PBC / Client Books sheets only */
+/* These are the sheets where preparers paste client data — no formulas here */
+var ENTRY_SHEETS = {
+  '1120':  [
+    { sheet:'PBC - P&L', colA:true, colB:true, startRow:4, endRow:60 },
+    { sheet:'PBC - Balance Sheet', colA:true, colB:true, startRow:4, endRow:60 }
+  ],
+  '1120S': [
+    { sheet:'PBC - P&L2', colA:true, colB:true, startRow:3, endRow:62 },
+    { sheet:'PBC- Balance Sheet', colA:true, colB:true, startRow:3, endRow:87 }
+  ],
+  '1065': [
+    { sheet:'Client Books', colA:false, colB:false, startRow:5, endRow:130,
+      cols:[2,3] /* C and D = Debit/Credit (0-indexed: 2,3) */ }
+  ]
+};
+
+function fillEntryPlaceholders(wb) {
+  var maps = ENTRY_SHEETS[ST.type] || [];
+  for (var m = 0; m < maps.length; m++) {
+    var cfg = maps[m];
+    var ws = wb.Sheets[cfg.sheet];
+    if (!ws) continue;
+
+    for (var R = cfg.startRow; R <= cfg.endRow; R++) {
+      // Check if row is hidden — skip if so
+      if (ws['!rows'] && ws['!rows'][R] && ws['!rows'][R].hidden) continue;
+
+      var cols = cfg.cols || [];
+      // colA = column 0 (account name), colB = column 1 (amount)
+      if (cfg.colA) cols.push(0);
+      if (cfg.colB) cols.push(1);
+
+      for (var ci = 0; ci < cols.length; ci++) {
+        var C = cols[ci];
+        var addr = XLSX.utils.encode_cell({r:R, c:C});
+        var cell = ws[addr];
+        // Only fill if cell is empty (no value, no formula)
+        if (!cell || (cell.v === undefined && cell.v !== 0 && !cell.f)) {
+          ws[addr] = { v:'--', t:'s', s: STY.entryText };
+        } else if (cell && cell.v === null && !cell.f) {
+          cell.v = '--';
+          cell.t = 's';
+          cell.s = STY.entryText;
+        }
+      }
+    }
+  }
+}
+
 /* ── Hide excess blank rows based on account counts ── */
 /* Uses SheetJS !rows array to set hidden:true on unused rows */
 function hideExcessRows(wb, ac) {
@@ -792,6 +843,10 @@ async function generate() {
       oe:      parseInt(document.getElementById('acOE').value) || 2
     };
     hideExcessRows(wb, ac);
+
+    // Fill blank entry cells with "--" placeholder (after hiding so hidden rows are skipped)
+    statusEl.textContent = 'Adding entry placeholders...';
+    fillEntryPlaceholders(wb);
 
     statusEl.textContent = 'Building Excel file...';
 
